@@ -1,0 +1,35 @@
+# Environment
+.env
+*.env
+.env.local
+
+# Internal context (not for public)
+internal/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+.venv/
+venv/
+env/
+
+# Telegram sessions
+*.session
+*.session-journal
+
+# Secrets
+secrets/
+*.key
+*.pem
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Claude Code local settings
+.claude/
