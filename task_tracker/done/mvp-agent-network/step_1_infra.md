@@ -30,6 +30,8 @@ PUBLIC_CHANNEL=projectness
 ANTHROPIC_API_KEY=YOUR_ANTHROPIC_API_KEY
 AGENT_ID_AI=
 AGENT_ID_COMMUNITY=
+TG_GATHER_URL=https://YOUR_RAILWAY_APP.railway.app
+TG_GATHER_API_KEY=YOUR_TG_GATHER_API_KEY
 ```
 
 > Токены ботов пока тестовые — перед релизом в open-source сделать revoke и перевыпустить.
@@ -51,7 +53,7 @@ curl "https://api.telegram.org/bot$CURATOR_BOT_TOKEN/getUpdates"
 
 ```bash
 # Проверить что бот может писать в Bus топик
-curl -X POST "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
+curl -X POST "https://api.telegram.org/bot$CURATOR_BOT_TOKEN/sendMessage" \
   -d "chat_id=$GROUP_CHAT_ID&message_thread_id=$BUS_TOPIC_ID&text=test"
 
 # Ответ должен содержать "ok":true

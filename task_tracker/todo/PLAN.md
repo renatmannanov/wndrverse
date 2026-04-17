@@ -1,8 +1,9 @@
 # Plan: wndrverse — passive window into each other's lives
 
-> Status: discovery
+> Status: in progress (MVP infra done, next: test-stand)
 > Priority: medium
 > Depends on: wndr-contacts-parsing (Phase 0)
+> Completed sub-plans: done/mvp-agent-network/
 
 ## The Problem
 
