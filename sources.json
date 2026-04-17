@@ -1,0 +1,168 @@
+{
+  "owner": "renat",
+  "updated": "2026-04-13",
+  "sources": [
+    {
+      "category": "countries",
+      "channels": [
+        {
+          "name": "Kazakhstan informal chat",
+          "tg": "",
+          "focus": "важное про Казахстан: РВП, ВНЖ, законы",
+          "active": true
+        },
+        {
+          "name": "ПТД и ВНЖ Грузия",
+          "tg": "ptd_vnzh_georgia",
+          "focus": "важное про Грузию, ИП там",
+          "active": true
+        },
+        {
+          "name": "ИП/Бизнес Грузия",
+          "tg": "ipgeorgia",
+          "focus": "бизнес в Грузии",
+          "active": true
+        }
+      ]
+    },
+    {
+      "category": "ai_startups",
+      "channels": [
+        {
+          "name": "Нейроцех",
+          "tg": "neurozeh",
+          "focus": "AI, полезные инструменты — часто сохраняю и забываю",
+          "active": true
+        },
+        {
+          "name": "Твой пет проект",
+          "tg": "your_pet_project",
+          "focus": "пет-проекты, вайбкодинг",
+          "active": true
+        },
+        {
+          "name": "Силиконовый Мешок",
+          "tg": "prompt_design",
+          "focus": "AI, вайбкодинг",
+          "active": true
+        },
+        {
+          "name": "GPT/AI Central Александра Горного",
+          "tg": "aioftheday",
+          "focus": "AI",
+          "active": true
+        },
+        {
+          "name": "EDU — Products & Startups",
+          "tg": "ProductsAndStartups",
+          "focus": "продукты, стартапы, AI",
+          "active": true
+        },
+        {
+          "name": "Охотник за талантами. Майк Волков",
+          "tg": "huntermikevolkov",
+          "focus": "рекрутинг и AI",
+          "active": true
+        },
+        {
+          "name": "Глеб Кудрявцев — продукты и бизнес",
+          "tg": "glebkudr",
+          "focus": "бизнес, продукт, вайбкодинг",
+          "active": true
+        },
+        {
+          "name": "Дизайнер, привет",
+          "tg": "jun_hi",
+          "focus": "дизайн рекрутингового продукта + AI",
+          "active": true
+        },
+        {
+          "name": "kyrillic",
+          "tg": "kyrillic",
+          "focus": "бизнес, стартапы, номадство, AI — куча всего",
+          "active": true
+        },
+        {
+          "name": "Всеволод Устинов",
+          "tg": "vsevolodustinovchannel",
+          "focus": "стартапы, AI, пост-ирония",
+          "active": true
+        },
+        {
+          "name": "Витя в АЙ-ТИ",
+          "tg": "viktor_v_it",
+          "focus": "разработка мобильных приложений, очень круто пишет",
+          "active": true
+        }
+      ]
+    },
+    {
+      "category": "jobs",
+      "channels": [
+        {
+          "name": "Dev & ML Connectable Jobs",
+          "tg": "dev_connectablejobs",
+          "focus": "вакансии dev/ML",
+          "active": true
+        },
+        {
+          "name": "Connectable Jobs",
+          "tg": "zarubezhom_jobs",
+          "focus": "вакансии за рубежом",
+          "active": true
+        }
+      ]
+    },
+    {
+      "category": "running",
+      "channels": [
+        {
+          "name": "МИСТЕР ПОЛУМАРАФОН",
+          "tg": "vesninrun",
+          "focus": "бег",
+          "active": true
+        },
+        {
+          "name": "Николь Ремезок | Бег",
+          "tg": "nicolerunclub",
+          "focus": "бег",
+          "active": true
+        },
+        {
+          "name": "Дневник Марафонца",
+          "tg": "dnevnik_marafonca",
+          "focus": "бег",
+          "active": true
+        }
+      ]
+    },
+    {
+      "category": "groups",
+      "channels": [
+        {
+          "name": "WNDR chat",
+          "tg": "",
+          "focus": "основной чат сообщества WNDR",
+          "active": true
+        }
+      ]
+    },
+    {
+      "category": "private",
+      "channels": [
+        {
+          "name": "Приватный канал Рената",
+          "tg": "iwacado",
+          "focus": "личные заметки по всем темам",
+          "active": true
+        },
+        {
+          "name": "Публичный канал Рената",
+          "tg": "projectness",
+          "focus": "публичные посты — редко",
+          "active": true
+        }
+      ]
+    }
+  ]
+}

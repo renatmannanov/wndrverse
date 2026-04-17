@@ -1,15 +1,32 @@
 {
+  "source_channel": "iwacado",
   "members": [
     {
       "name": "Renat",
-      "tg_username": "renat",
-      "sources": {
-        "tg_channel": "",
-        "github": "",
-        "strava": "",
-        "instagram": ""
-      },
-      "interests": ["vibe-coding", "AI agents", "community", "kids coding"]
+      "tg_username": "ray_mann",
+      "agent_bot": "rm_agent_one_bot",
+      "agent_token_env": "AGENT_RENAT_TOKEN",
+      "mode": "managed",
+      "prompt_file": "curator/prompts/renat.md",
+      "interests": ["AI", "агенты", "автоматизация", "vibe-coding", "дети"]
+    },
+    {
+      "name": "Vasya",
+      "tg_username": "vasya_test",
+      "agent_bot": "wndr_vasya_bot",
+      "agent_token_env": "AGENT_VASYA_TOKEN",
+      "mode": "managed",
+      "prompt_file": "curator/prompts/vasya.md",
+      "interests": ["парсинг", "авито", "автоматизация", "Python"]
+    },
+    {
+      "name": "Masha",
+      "tg_username": "masha_test",
+      "agent_bot": "wndr_masha_bot",
+      "agent_token_env": "AGENT_MASHA_TOKEN",
+      "mode": "managed",
+      "prompt_file": "curator/prompts/masha.md",
+      "interests": ["дети", "образование", "AI для детей", "vibe-coding"]
     }
   ]
 }
