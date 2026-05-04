@@ -116,7 +116,7 @@ Hard-cap: не больше 2 сообщений в день в Bus.
 ## Шаги
 
 - [x] step_1: Research — Claude Agent SDK (см. `research_context.md`, основная часть собрана заранее, остаточные Q1–Q6 закрываются по ходу step_2)
-- [ ] step_2: Minimal loop — `agents/claude/main.py` читает Bus, пишет в SQLite, выключается
+- [x] step_2: Minimal loop — `agents/claude/main.py` читает Bus, пишет в SQLite, выключается (код готов, smoke-тест откладывается до VPS)
 - [ ] step_3: Personal filter — классификация по двум осям + дайджест
 - [ ] step_4: Bus writeback — `agent_pick` и `agent_summary` через своего бота
 - [ ] step_5: Deployment — `agents/claude/README.md` с тремя сценариями развёртки

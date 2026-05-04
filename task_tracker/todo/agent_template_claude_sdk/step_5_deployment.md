@@ -95,7 +95,7 @@ cd agents/claude
 cp .env.example .env
 nano .env
 # Заполнить:
-#   WNDR_CLAUDE_BOT_TOKEN=...   (токен бота агента Клода)
+#   AGENT_CLAUDE_TOKEN=...   (токен бота агента Клода)
 #   GROUP_CHAT_ID=-1003968221945
 #   BUS_TOPIC_ID=3
 #   OWNER_USERNAME=ray_mann

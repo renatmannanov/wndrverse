@@ -1,6 +1,6 @@
 # Step 2: Minimal loop
 
-> Status: pending
+> Status: done (код), smoke-тест откладывается до развёртки на VPS
 > Depends on: step_1
 
 ## Цель шага
@@ -36,7 +36,7 @@ agents/
 
 ```
 # Telegram (свой бот для агента Клода)
-WNDR_CLAUDE_BOT_TOKEN=...      # токен бота от @BotFather
+AGENT_CLAUDE_TOKEN=...      # токен бота от @BotFather
 GROUP_CHAT_ID=-1003968221945   # Telegram supergroup
 BUS_TOPIC_ID=3                 # топик Bus
 
