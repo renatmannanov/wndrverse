@@ -19,6 +19,11 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+# Force UTF-8 on stdout/stderr (Windows consoles default to cp1252 and mangle non-ASCII)
+for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, "reconfigure"):
+        stream.reconfigure(encoding="utf-8")
+
 # Hard rule: this agent must NOT use ANTHROPIC_API_KEY.
 # If something put it in the system env, drop it BEFORE the SDK looks at env.
 os.environ.pop("ANTHROPIC_API_KEY", None)
@@ -130,13 +135,17 @@ async def _run() -> int:
 
 
 def main() -> None:
+    async def _wrapped() -> int:
+        return await asyncio.wait_for(_run(), timeout=HARD_TIMEOUT_SEC)
+
     try:
-        rc = asyncio.run(asyncio.wait_for(_run(), timeout=HARD_TIMEOUT_SEC))
+        rc = asyncio.run(_wrapped())
+    except SystemExit:
+        # _run() called sys.exit() — let it propagate with its code
+        raise
     except asyncio.TimeoutError:
         print(f"[claude-agent] ERROR: hard timeout {HARD_TIMEOUT_SEC}s exceeded", file=sys.stderr)
         sys.exit(EXIT_TIMEOUT)
-    except SystemExit:
-        raise
     except Exception as e:
         print(f"[claude-agent] ERROR: unhandled: {e}", file=sys.stderr)
         sys.exit(EXIT_RUNTIME)

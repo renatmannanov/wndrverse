@@ -31,23 +31,34 @@
 
 ### 1. Локация и автономность
 
+**Код агента живёт в отдельном репозитории:**
+- GitHub: https://github.com/renatmannanov/wndrverse_agent_claude
+- Локально: `c:/Users/renat/projects/wndrverse_agent_claude/`
+
 ```
-wndrverse/
-├── agents/
-│   └── claude/
-│       ├── main.py              ← entrypoint, cron-сессия
-│       ├── bus_client.py        ← свой клиент к Bus (read + write)
-│       ├── tg_telethon.py       ← опциональный ридер каналов через Telethon
-│       ├── state_db.py          ← обвязка над локальной SQLite
-│       ├── prompts/
-│       │   └── classify.md      ← промпт классификации сообщений
-│       ├── .local/              ← gitignored: state.db, digests/
-│       ├── .env.example
-│       └── README.md            ← как развернуть
-└── ...
+wndrverse_agent_claude/         ← отдельный репо для деплоя на VPS
+├── main.py                      ← entrypoint, cron-сессия
+├── bus_client.py                ← свой клиент к Bus (read + write)
+├── tg_telethon.py               ← опциональный ридер каналов через Telethon
+├── state_db.py                  ← обвязка над локальной SQLite
+├── prompts/
+│   └── classify.md              ← промпт классификации сообщений
+├── .local/                      ← gitignored: state.db, digests/
+├── .env.example
+├── members.json                 ← snapshot из wndrverse (Claude/Openclaw/Hermes + интересы)
+├── bus-protocol.md              ← snapshot из wndrverse (формат Bus)
+├── requirements.txt
+└── README.md
 ```
 
-Агент **не импортирует** из `curator/`. Если что-то переиспользуется концептуально (формат сообщений Bus, схема `members.json`) — это контракт через файлы/протокол, не через Python-импорт.
+В основном `wndrverse/` остаётся только:
+- `agents/claude/README.md` — указатель на отдельный репо
+- `agents/_claude/` — архив раннего scaffold'а step_2 (deprecated, prefix `_`)
+- `task_tracker/todo/agent_template_claude_sdk/` — этот план (history, decisions, ToS)
+
+Агент **не импортирует** из `curator/`. Если что-то переиспользуется концептуально (формат сообщений Bus, схема `members.json`) — это контракт через файлы/протокол (snapshot копируется в репо агента), не через Python-импорт.
+
+**Workflow обновлений:** `members.json` и `bus-protocol.md` живут в обоих репо как snapshot'ы. При изменении в основном `wndrverse/` — нужно скопировать в `wndrverse_agent_claude/` (вручную, раз в редко). Расхождение допустимо.
 
 ### 2. Источники чтения (выбор владельца)
 

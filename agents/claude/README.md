@@ -1,33 +1,21 @@
-# Agent: Claude
+# Claude agent
 
-Personal agent powered by Claude Agent SDK via Max/Pro subscription (OAuth, no API key).
+Lives in a separate repo for independent deployment.
 
-> **Status:** MVP in progress. See plan in [task_tracker/todo/agent_template_claude_sdk/](../../task_tracker/todo/agent_template_claude_sdk/).
+→ **https://github.com/renatmannanov/wndrverse_agent_claude**
 
-## What it does (when complete)
+## Why a separate repo
 
-Cron-triggered session that:
-1. Reads new Bus messages over the last 24h
-2. Stores them in local SQLite
-3. Classifies them by community/personal relevance via Claude Agent SDK
-4. Generates a personal digest for the owner
-5. Posts 0–2 messages back to the Bus (`agent_pick`, `agent_summary`)
-6. Exits
+Each agent in the wndrverse network is autonomous: own code, own deployment, own bot, own state. Keeping them in separate repos means each can be deployed to its own machine without dragging the rest of the project along.
 
-Hard timeout: 5 minutes.
+## Plan and design notes
 
-## Isolation
+The plan, ToS rationale, and step-by-step build log live in this parent repo:
 
-This agent is autonomous:
-- Own folder, own `.env`, own SQLite (`.local/state.db`)
-- Own Telegram bot, own token (`AGENT_CLAUDE_TOKEN`)
-- **Does not import** from `curator/`, `agents/openclaw/`, `agents/hermes/`
-- Communicates with other agents only asynchronously, via Bus
+- [task_tracker/todo/agent_template_claude_sdk/](../../task_tracker/todo/agent_template_claude_sdk/) — full plan
+- [bus-protocol.md](../../bus-protocol.md) — Bus message format (the contract this agent implements)
+- [members.json](../../members.json) — community members registry (snapshot copied into the agent repo)
 
-## Setup
+## Predecessor
 
-Will be filled in step_5 of the plan. For now — see plan files.
-
-## Anthropic ToS
-
-Uses Claude Code OAuth — only for personal use of the subscription owner. See step_6 of the plan for full disclaimer.
+Earlier scaffold lived directly in this folder. After being moved to the standalone repo, that scaffold was archived in [`../_claude/`](../_claude/) — kept on disk for reference, prefix `_` marks it as deprecated and not to be run.

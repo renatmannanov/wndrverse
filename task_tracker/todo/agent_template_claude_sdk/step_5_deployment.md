@@ -41,13 +41,12 @@ npm install -g @anthropic-ai/claude-code
 # 2. Залогиниться через свою Max-подписку
 claude login
 
-# 3. Склонировать репо (если ещё не)
-git clone https://github.com/<wndrverse>/wndrverse.git
-cd wndrverse
+# 3. Склонировать репо агента (отдельный, только агент Клода)
+git clone https://github.com/renatmannanov/wndrverse_agent_claude.git
+cd wndrverse_agent_claude
 pip install -r requirements.txt
 
 # 4. Конфиг агента
-cd agents/claude
 cp .env.example .env
 # заполнить переменные (см. ниже)
 
@@ -65,7 +64,7 @@ Cron не настраиваем. Запускаешь когда хочется
 
 Цель: тикает само раз в сутки.
 
-**Целевая инфраструктура wndrverse:** Ubuntu VPS где уже / будут жить три агента (`claude`, `openclaw`, `hermes`).
+**Целевая инфраструктура wndrverse:** Ubuntu VPS где уже / будут жить три агента (Claude / Openclaw / Hermes), каждый из своего отдельного репо.
 
 ```bash
 # 1. SSH на VPS
@@ -84,40 +83,39 @@ claude login
 # ВАЖНО: эта команда выполняется ИМЕННО под тем системным юзером, от которого
 # будет работать cron. OAuth-сессия привязана к ~/.claude/ конкретного юзера.
 
-# 5. Клонировать wndrverse (если ещё нет)
-git clone https://github.com/<wndrverse>/wndrverse.git ~/wndrverse
-cd ~/wndrverse
+# 5. Клонировать репо агента Клода (отдельный, не весь wndrverse)
+git clone https://github.com/renatmannanov/wndrverse_agent_claude.git ~/wndrverse_agent_claude
+cd ~/wndrverse_agent_claude
 pip install -r requirements.txt --break-system-packages
 # (или через venv: python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt)
 
 # 6. Настроить .env Клода
-cd agents/claude
 cp .env.example .env
 nano .env
 # Заполнить:
-#   AGENT_CLAUDE_TOKEN=...   (токен бота агента Клода)
+#   AGENT_CLAUDE_TOKEN=...   (токен бота агента Клода от @BotFather)
 #   GROUP_CHAT_ID=-1003968221945
 #   BUS_TOPIC_ID=3
-#   OWNER_USERNAME=ray_mann
+#   OWNER_USERNAME=claude
 
 # 7. Часовой пояс
 sudo timedatectl set-timezone Europe/Moscow
 
 # 8. Тест ручного запуска
-cd ~/wndrverse
-python agents/claude/main.py
+cd ~/wndrverse_agent_claude
+python main.py
 # Ожидание: лог "fetched N messages, total in db: M", скрипт завершился сам, exit 0
 
 # 9. Cron на 6:00 утра
 crontab -e
 # Добавить:
-# 0 6 * * * cd /home/user/wndrverse && /usr/bin/python3 agents/claude/main.py >> /home/user/claude_agent.log 2>&1
+# 0 6 * * * cd /home/user/wndrverse_agent_claude && /usr/bin/python3 main.py >> /home/user/claude_agent.log 2>&1
 ```
 
 **Где смотреть что агент сделал:**
 - `~/claude_agent.log` — лог cron (что завершилось, какие ошибки)
-- `~/wndrverse/agents/claude/.local/state.db` — БД сообщений и классификации
-- `~/wndrverse/agents/claude/.local/digests/` — дайджесты
+- `~/wndrverse_agent_claude/.local/state.db` — БД сообщений и классификации
+- `~/wndrverse_agent_claude/.local/digests/` — дайджесты
 
 **Проверка перед первым cron-запуском:**
 - Бот добавлен в Telegram-supergroup wndrverse
@@ -135,25 +133,27 @@ crontab -e
 
 ## Файлы которые создаются на этом шаге
 
-1. **`agents/claude/.env.example`** — шаблон со всеми переменными (создаётся ещё на step_2, на step_5 наполняется комментариями для деплоя)
-2. **`agents/claude/README.md`** — два сценария + что не работает + ссылка на step_6 (ToS)
-3. **`requirements.txt`** в корне — добавить `claude-agent-sdk` (если уже не там)
+Все живут в репо `wndrverse_agent_claude` (https://github.com/renatmannanov/wndrverse_agent_claude):
 
-`.gitignore` уже покрывает `agents/*/.env`, `agents/*/.local/` (сделано на step_2).
+1. **`.env.example`** — шаблон со всеми переменными (создан на step_2)
+2. **`README.md`** — описание + два сценария + что не работает + ссылка на step_6 (ToS)
+3. **`requirements.txt`** — `claude-agent-sdk`, `python-telegram-bot`, `python-dotenv`
+
+`.gitignore` уже покрывает `.env`, `.local/`, `__pycache__/` (сделано на step_2).
 
 ## Smoke-тест шага
 
-Пройти сценарий 2 (VPS) с нуля и записать сколько времени заняло. Целевая планка: < 30 минут от первого SSH до первого успешного `python agents/claude/main.py`.
+Пройти сценарий 2 (VPS) с нуля и записать сколько времени заняло. Целевая планка: < 30 минут от первого SSH до первого успешного `python main.py`.
 
 Если упёрся в шаг — записать в issues / в backlog заметку.
 
 ## Критерии готовности
 
-- [ ] `agents/claude/README.md` создан с двумя сценариями
+- [ ] `README.md` в `wndrverse_agent_claude` описывает два сценария деплоя
 - [ ] Раздел "Что НЕ работает" присутствует
 - [ ] Ссылка на step_6 (ToS-disclaimer) есть
 - [ ] `.env.example` финализирован с комментариями
-- [ ] `requirements.txt` обновлён
+- [ ] `requirements.txt` финализирован
 - [ ] Smoke-тест: пройден сценарий 2 на реальном VPS
 - [ ] Статус в PLAN.md → done
 
