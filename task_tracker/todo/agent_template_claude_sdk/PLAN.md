@@ -130,7 +130,7 @@ Hard-cap: не больше 2 сообщений в день в Bus.
 - [x] step_2: Minimal loop — `agents/claude/main.py` читает Bus, пишет в SQLite, выключается (код готов, smoke-тест откладывается до VPS)
 - [ ] step_3: Personal filter — классификация по двум осям + дайджест
 - [ ] step_4: Bus writeback — `agent_pick` и `agent_summary` через своего бота
-- [ ] step_5: Deployment — `agents/claude/README.md` с тремя сценариями развёртки
+- [~] step_5: Deployment — VPS-деплой прошёл (smoke OK), README в репо `wndrverse_agent_claude` ещё причешем по итогу
 - [ ] step_6: Legal disclaimer — границы ToS в README
 - [ ] step_7: Completion — финальная проверка
 

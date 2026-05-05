@@ -1,7 +1,38 @@
 # Step 5: Deployment
 
-> Status: pending
+> Status: in-progress (deploy сделан, README в репо ещё причешем)
 > Depends on: step_2 (минимум — есть рабочий скрипт)
+
+## Что уже сделано (2026-05-05)
+
+VPS-деплой по сценарию 2 прошёл успешно:
+
+- Сервер: Hetzner CX33 Ubuntu 24.04, юзер `rm_agent` (тот же где OpenClaw/Hermes)
+- Установлено: `python3-pip`, `python3-venv`, `sqlite3` через apt; `@anthropic-ai/claude-code` 2.1.128 через `npm install -g` (без sudo, в `~/.npm-global/`)
+- Клонирован: `https://github.com/renatmannanov/wndrverse_agent_claude.git` → `~/wndrverse_agent_claude/`
+- Зависимости: в venv `~/wndrverse_agent_claude/.venv/` (изоляция от системного Python)
+- OAuth: `claude` запущен из `~/wndrverse_agent_claude/`, владелец залогинился под Max (Opus 4.7), токен лёг в `~/.claude/`
+- `.env`: скопирован через scp с локальной машины (4 переменных, 885 байт)
+- Smoke test: `cd ~/wndrverse_agent_claude && .venv/bin/python main.py` → `OAuth session OK`, `fetched=1 inserted=1` (тестовое сообщение `msg_id=60` из Bus)
+- Idempotency: повторный запуск → `fetched=0 inserted=0`
+
+**Cron не настроен** — будет настраиваться когда step_4 завершён и агент реально пишет в Bus.
+
+**Команда для запуска вручную на VPS:**
+```bash
+cd ~/wndrverse_agent_claude && .venv/bin/python main.py
+```
+
+**Workflow для обновлений:**
+```bash
+ssh -i ~/.ssh/openclaw_hetzner rm_agent@62.238.31.95
+cd ~/wndrverse_agent_claude
+git pull
+.venv/bin/pip install -r requirements.txt   # если меняли deps
+.venv/bin/python main.py                     # smoke
+```
+
+
 
 ## Цель шага
 
