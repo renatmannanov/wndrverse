@@ -1,6 +1,6 @@
 # Community Brain MVP — умный дайджест по сообществу
 
-> Статус: pending
+> Статус: done
 > Дата: 2026-05-23
 > Тип: фича
 
@@ -41,7 +41,7 @@
 | 6 | step_6_brain_synthesis.md       | [x] |
 | 7 | step_7_delivery_cli.md          | [x] |
 | 8 | step_8_smoke.md                 | [x] |
-| 9 | step_9_completion.md            | [ ] |
+| 9 | step_9_completion.md            | [x] |
 
 ## Архитектура (целевая раскладка)
 

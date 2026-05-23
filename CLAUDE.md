@@ -38,12 +38,30 @@ python agent-template/agent_cron.py
 python agent-template/agent_managed.py create
 ```
 
+### Community brain (core/) — digest pipeline
+
+```bash
+docker compose up -d db                              # postgres+pgvector on 5434
+python -m core.db init                               # create schema
+python -m core.ingest.loaders --dir <exports>        # load messages (or env WNDR_EXPORTS_DIR)
+python -m core.enrich.embedder --estimate            # cost estimate (no API spend)
+python -m core.enrich.embedder                        # real embeddings (spends OpenAI)
+python -m delivery digest --topic offerings --period all   # digest → stdout (1w/1m/all)
+```
+
+Needs `.env` (DATABASE_URL, OPENAI_API_KEY, WNDR_EXPORTS_DIR — see `.env.example`).
+PII: only text + `[#id]` go to OpenAI; names substituted locally on output.
+`data/` is gitignored — community messages are never committed.
+
 ## Key files
 
 - `members.json` — list of participants and their sources
 - `bus-protocol.md` — message format for the Bus
 - `task_tracker/todo/PLAN.md` — current development plan
 - `task_tracker/todo/ARCHITECTURE.md` — full architecture decisions
+- `core/` — community brain (digest pipeline): db / ingest / store / enrich / brain / llm / prompts
+- `delivery/` — digest CLI + output channels (stdout now; telegram = future)
+- `docker-compose.yml` — postgres+pgvector (db `wndrverse`, port 5434)
 
 ## Env vars
 
@@ -63,3 +81,4 @@ ANTHROPIC_API_KEY  — for Option B (Claude Managed Agent)
 - Telethon — userbot for reading channels/groups
 - httpx — HTTP requests (GitHub, RSS)
 - anthropic — Claude API for curator logic (v1.5+)
+- **core/ pipeline:** postgres+pgvector, sqlalchemy, openai (embeddings + synthesis)

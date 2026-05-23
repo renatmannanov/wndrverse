@@ -180,4 +180,29 @@ intro=знакомство, sales=продажи, boltalka=болталка, ann
   путь cap→Pass1 отработал на топике >800.
 - Мелочь: spike дублей на батче 5100-5200 (+34/+20) — кластер почти-идентичных (вероятно daily/boltalka).
 - Прибрано: temp .txt дайджесты удалены, stray artifact id=2 ("all", insufficient-data тест) удалён.
+
+### Шаг 9 — ЗАВЕРШЕНИЕ (done, 2026-05-23)
+- README: добавлена секция «Community Brain (core/)» — Run it (docker compose + пайплайн),
+  Privacy, Handoff. Project Structure дополнен core/ + delivery/. Существующий контент curator не тронут.
+- CLAUDE.md: Commands += блок core/ (init/ingest/enrich/digest), Key files += core/delivery/compose,
+  Stack += postgres+pgvector/sqlalchemy/openai.
+- Финальные проверки (командами): юнит-тесты зелёные; все 10 модулей core/delivery импортируются;
+  curator/agent-template/test_stand — `git diff master` пуст; нет хардкод C:\Users; data/ в git только
+  .gitkeep; embed шлёт только text, synthesis [#id]+text без имён; нет import storage/services/config
+  из ayda (источник читался только при разработке). Папка todo→done (git mv, история сохранена).
+- context.md для wndrverse НЕ ведётся (живёт у 00_anna) — пункт н/п.
+
+### ИТОГ MVP
+- 6530 фрагментов (10 топиков), 6104 embedded. Фича дайджеста работает end-to-end.
+- 6 дайджестов сгенерировано (3 all-period + 3 march2026), лежат в data/digests/ (gitignored).
+- Семантический поиск проверен (3 запроса) — эмбеддинги ловят смысл (опечатки/синонимы). Дистанции
+  0.45-0.65, на проде для поиска по людям добавить фильтр по топику + порог + отсечку коротких.
+- **Ждём фидбэк от ребят по дайджестам** (юзер перешлёт). Дальше — future из плана:
+  realtime-бот, расписание, доставка в TG, clustering (облако тем), поиск по людям.
+
+### Известные шероховатости (не баги, для будущего тюнинга промпта)
+- LLM иногда видит 2 сообщения одного автора как двух людей (в промпте только [#id], имён нет — цена PII).
+- harvest-дайджест зацепил префикс «Точка Б» из исходных формулировок.
+- Косметика ссылок: LLM варьирует формат [#id] — _REF_RE терпим, незаменённые id остаются как есть.
+- datetime.utcnow() даёт DeprecationWarning (Py3.14) — оставлено (БД хранит naive datetime).
 ---

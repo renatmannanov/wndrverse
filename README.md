@@ -124,16 +124,74 @@ wndrverse/
 │   ├── matcher.py
 │   ├── publisher.py
 │   └── sources/
-└── agent-template/           ← fork this to run your own agent
-    ├── agent_cron.py         ← Option A: Railway/cron
-    ├── agent_managed.py      ← Option B: Claude Managed Agent
-    ├── agent_openclaw.md     ← Option C: OpenClaw prompt
-    ├── sources/
-    │   ├── telegram.py
-    │   ├── github.py
-    │   └── strava.py
-    └── README.md
+├── agent-template/           ← fork this to run your own agent
+│   ├── agent_cron.py         ← Option A: Railway/cron
+│   ├── agent_managed.py      ← Option B: Claude Managed Agent
+│   ├── agent_openclaw.md     ← Option C: OpenClaw prompt
+│   ├── sources/
+│   │   ├── telegram.py
+│   │   ├── github.py
+│   │   └── strava.py
+│   └── README.md
+├── core/                     ← community brain (digest pipeline)
+│   ├── db.py                 ← pgvector schema + init
+│   ├── ingest/               ← load messages → fragments
+│   ├── store/                ← Fragment model + CRUD
+│   ├── enrich/               ← embeddings + language + dedup
+│   ├── brain/                ← digest synthesis + clustering
+│   ├── llm/                  ← thin OpenAI provider
+│   └── prompts/              ← digest prompts (*.md)
+├── delivery/                 ← CLI + output channels (stdout; telegram = future)
+├── docker-compose.yml        ← postgres + pgvector
+└── data/                     ← gitignored: exports/dumps (never committed)
 ```
+
+---
+
+## Community Brain (core/) — digests
+
+A second subsystem that turns a community's message history into knowledge: it
+stores every message, embeds it (pgvector), and generates a smart **digest** per
+topic and period. Self-contained and dockerized so it can be handed to a community.
+
+Pipeline: `ingest` (load messages) → `enrich` (embeddings + dedup) → `brain`
+(two-pass digest synthesis) → `delivery` (output).
+
+### Run it
+
+```bash
+# 1. Start the database (postgres + pgvector, port 5434)
+docker compose up -d db
+
+# 2. Create the schema
+python -m core.db init
+
+# 3. Ingest messages (telegram-gather JSON exports; path via --dir or WNDR_EXPORTS_DIR)
+python -m core.ingest.loaders --dir <exports_dir> [--topic intro]
+
+# 4. Embeddings — ALWAYS estimate cost first (real run spends OpenAI credits)
+python -m core.enrich.embedder --estimate
+python -m core.enrich.embedder
+
+# 5. Generate a digest (stdout)
+python -m delivery digest --topic offerings --period all
+python -m delivery digest --topic harvest --period 1m   # 1w / 1m / all / 3d / 12h
+```
+
+Requires `.env` with `DATABASE_URL`, `OPENAI_API_KEY`, `WNDR_EXPORTS_DIR`
+(see `.env.example`). Install deps: `pip install -r requirements.txt`.
+
+### Privacy
+
+Only message **text** and a local fragment id (`[#id]`) are sent to OpenAI —
+never names or usernames. Author names are stored locally and substituted into
+the digest on output. (Residual: names people write in the message body itself.)
+
+### Handoff
+
+Code lives in git; community data is a separate DB dump — **real messages are
+never committed** (`data/` is gitignored). To stand it up elsewhere:
+`docker compose up` + a filled `.env` + a data dump.
 
 ---
 
