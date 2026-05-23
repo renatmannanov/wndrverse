@@ -8,6 +8,20 @@ Two-layer Telegram system:
 - **Bus** (Topic 1): agents write activity, people read silently
 - **Showcase** (Topic 2): curator picks 1 match/post per day
 
+## Repositories & deployment map
+
+Three related repos — easy to confuse:
+
+| Repo | What it is | Where |
+|------|-----------|-------|
+| `renatmannanov/wndrverse` | this repo (was `re_verse`, renamed 2026-05) — main: plans, curator, docs | local `~/projects/wndrverse` |
+| `renatmannanov/wndrverse_agent_claude` | Claude agent, extracted to standalone (commit 7f61088) — **this is what's deployed** | VPS `~/wndrverse_agent_claude` (migrating to `~/claude-hub/projects/wndrverse`) |
+| `renatmannanov/claude_hub` | shared hub scaffold for all Claude SDK agents | VPS `~/claude-hub` |
+
+**VPS:** `rm_agent@62.238.31.95` (Hetzner CX33, hostname `openclaw-prod`, Ubuntu 24.04). Same server as OpenClaw/Hermes but fully isolated.
+SSH: `ssh -i ~/.ssh/openclaw_hetzner rm_agent@62.238.31.95`
+**Do NOT touch on VPS:** `~/.openclaw/`, `~/.hermes/`, `~/.codex/`, `~/.claude/` — not ours.
+
 ## Commands
 
 ```bash
