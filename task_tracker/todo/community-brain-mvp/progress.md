@@ -122,4 +122,21 @@ intro=знакомство, sales=продажи, boltalka=болталка, ann
   Механизм дедупа отработал (нашёл 0). На полном корпусе (boltalka) дубли вероятно появятся (шаг 8).
 - Защита от бесконечного цикла: если весь батч в errors (embedding остаётся NULL) — стоп.
 - Добавил safety-guard в _main: load_dotenv (как в loaders).
+
+### Шаг 6 (done, 2026-05-23)
+- `core/brain/synthesis.py`: two-pass (Pass1 LLM-отбор по тексту → Pass2 синтез),
+  промпты из `core/prompts/digest_selection.md` + `digest_synthesis.md`, LLM через
+  core.llm.client.complete. topic_type → TOPIC_HINTS (harvest/commits/daily/offerings/...).
+  Hard-cap входа INPUT_HARD_CAP=800 (последние по дате) ДО Pass1. synthesize_and_save → artifact.
+- `core/brain/clustering.py`: перенос, импорты на core.*, промпт в `cluster_name.md`.
+  hdbscan/umap импортируются ЛЕНИВО внутри run_clustering → модуль импортируется без них.
+- **PII подтверждён на практике:** в промпт уходит `[#id] (дата)\ntext`, БЕЗ author_name.
+  В дайджесте есть [#id]-ссылки (id из входа). Имена типа «Дмитрий» в теле — это из ТЕКСТА
+  сообщений («Привет, я Дмитрий...»), принятый остаток. Подстановка [#id]→[Имя] на шаге 7.
+- **Smoke на intro (151 фрагмент ≥150 симв):** Pass1 151→20, Pass2 → связный дайджест
+  с секциями (главные темы / кто что / связи / не потерять), 22 ссылки [#id]. Качество хорошее.
+- topic_type=harvest≠offerings — разные TOPIC_HINTS-строки в промпте; проверка на разнице
+  вывода — на шаге 8 (нужны разные топики в БД).
+- Hard-cap 800 на boltalka — проверка на шаге 8 (сейчас в БД нет больших топиков).
+- ID-парсер Pass1 терпим к формату (strip '[]#'); fallback при <5 id → последние 20 по дате.
 ---
