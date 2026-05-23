@@ -40,7 +40,7 @@
 | 5 | step_5_enrich.md                | [x] |
 | 6 | step_6_brain_synthesis.md       | [x] |
 | 7 | step_7_delivery_cli.md          | [x] |
-| 8 | step_8_smoke.md                 | [ ] |
+| 8 | step_8_smoke.md                 | [x] |
 | 9 | step_9_completion.md            | [ ] |
 
 ## Архитектура (целевая раскладка)
