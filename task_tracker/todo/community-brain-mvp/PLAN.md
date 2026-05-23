@@ -37,7 +37,7 @@
 | 2 | step_2_store.md                 | [x] |
 | 3 | step_3_llm_layer.md             | [x] |
 | 4 | step_4_ingest.md                | [x] |
-| 5 | step_5_enrich.md                | [ ] |
+| 5 | step_5_enrich.md                | [x] |
 | 6 | step_6_brain_synthesis.md       | [ ] |
 | 7 | step_7_delivery_cli.md          | [ ] |
 | 8 | step_8_smoke.md                 | [ ] |

@@ -31,8 +31,8 @@ except ImportError:
 
 
 def _pgvector_available() -> bool:
-    """Check if pgvector is available (reads live value from db module)."""
-    return _db.pgvector_available and _pgvector_import_ok
+    """Check if pgvector is available (lazy DB probe, cached in db module)."""
+    return _db.ensure_pgvector_checked() and _pgvector_import_ok
 
 # ---------------------------------------------------------------------------
 # Models

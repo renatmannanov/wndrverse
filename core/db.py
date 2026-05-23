@@ -28,7 +28,33 @@ engine = create_engine(DATABASE_URL, echo=False)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Flag: is pgvector available on this PostgreSQL instance?
+# Set by init_db(), and lazily auto-detected by ensure_pgvector_checked() so that
+# processes which only read (enrich/synthesis) don't have to call init_db() first.
 pgvector_available = False
+_pgvector_checked = False
+
+
+def ensure_pgvector_checked() -> bool:
+    """Lazily detect whether pgvector is installed on the DB (cached).
+
+    init_db() may not have run in this process (e.g. enrich/digest CLIs), so the
+    pgvector_available flag would otherwise stay False and silently disable
+    embedding queries. Probe pg_extension once and cache the result.
+    """
+    global pgvector_available, _pgvector_checked
+    if _pgvector_checked:
+        return pgvector_available
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
+            ).first()
+        pgvector_available = row is not None
+    except Exception as e:
+        logging.warning(f"pgvector availability check failed: {e}")
+        pgvector_available = False
+    _pgvector_checked = True
+    return pgvector_available
 
 
 def init_db():
@@ -37,7 +63,7 @@ def init_db():
     The DB starts clean (fresh docker volume), so tables are created correct from
     the start — no ALTER migrations needed.
     """
-    global pgvector_available
+    global pgvector_available, _pgvector_checked
 
     try:
         with engine.connect() as conn:
@@ -48,6 +74,7 @@ def init_db():
     except Exception as e:
         pgvector_available = False
         logging.warning(f"pgvector not available, embedding features disabled: {e}")
+    _pgvector_checked = True  # init_db result is authoritative; skip lazy re-probe
 
     # Import models so they are registered with Base.metadata.
     # Must happen AFTER pgvector_available is set (the Vector column is conditional).

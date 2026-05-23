@@ -106,4 +106,20 @@ intro=знакомство, sales=продажи, boltalka=болталка, ann
   в _main loaders (как в llm.client). Учесть для enrich/delivery CLI тоже.
 - Юнит-тест `tests/test_ingest_normalize.py` зелёный (mapping, empty-text→None, null user_id, tags).
 - intro в БД: 305 фрагментов, sender_id null=0, 2 фрагмента с tags, author_name/thread_id заполнены.
+
+### Шаг 5 (done, 2026-05-23)
+- `core/enrich/embedder.py`: normalize_all (батчи 100, commit per item, прогресс processed/total),
+  estimate() (без API), _detect_language, _check_duplicates (threshold 0.95). embed через core.llm.client.
+  PII: в OpenAI уходит ТОЛЬКО text (texts = [f['text']]), author_name НЕ добавляется.
+- **ГРАБЛЯ (важная, новая): `pgvector_available` был False в любом процессе без init_db().**
+  Все query-функции с guard `_pgvector_available()` (embed/dedup/count) молча возвращали 0/[].
+  `--estimate` показывал 0 unembedded при 305 в БД. ФИКС: `core.db.ensure_pgvector_checked()` —
+  ленивый разовый probe pg_extension (кэш), fragments_db зовёт его вместо чтения флага.
+  init_db ставит _pgvector_checked=True (его результат авторитетный).
+- **Юзер разрешил реальный прогон на intro (~$0.0012).** Прогон: 305 embedded, 0 errors.
+  Критерии: unembedded(non-dup)=0; language 299 ru / 5 mixed / 1 en; **дубликатов 0**.
+- **0 дубликатов в intro — НЕ баг.** intro=знакомства, каждое уникально, near-dup (>0.95) редки.
+  Механизм дедупа отработал (нашёл 0). На полном корпусе (boltalka) дубли вероятно появятся (шаг 8).
+- Защита от бесконечного цикла: если весь батч в errors (embedding остаётся NULL) — стоп.
+- Добавил safety-guard в _main: load_dotenv (как в loaders).
 ---
