@@ -139,4 +139,20 @@ intro=знакомство, sales=продажи, boltalka=болталка, ann
   вывода — на шаге 8 (нужны разные топики в БД).
 - Hard-cap 800 на boltalka — проверка на шаге 8 (сейчас в БД нет больших топиков).
 - ID-парсер Pass1 терпим к формату (strip '[]#'); fallback при <5 id → последние 20 по дате.
+
+### Шаг 7 (done, 2026-05-23)
+- `delivery/channels.py`: send(text, channel='stdout'); telegram_* → NotImplementedError (точка роста).
+- `delivery/cli.py` + `delivery/__main__.py`: `python -m delivery digest --topic X --period Y`.
+  Свой parse_period (all→None; h/d/w/m=30дней; неизвестный суффикс → raise, НЕ молчит).
+  humanize_refs: [#id]→[author_name, дата] локально из БД (get_fragments_by_ids), None→аноним.
+- **Грабля (cosmetic, предсказанная): LLM варьирует формат ссылки.** _REF_RE = `\[?#?(\d+)\]?`
+  ловит [#207]/#207/[207]/(#207). Неизвестные id оставляются как есть (дайджест читаем).
+- Юнит-проверки (без API): parse_period 1m=30д/1w=7д/12h/1y-raises; humanize_refs все форматы+аноним+unknown.
+- **End-to-end на intro прошёл:** `python -m delivery digest --topic intro --period all` →
+  связный дайджест, ссылки заменены на [Имя, дата] из НАШЕЙ БД (напр. [Dmitry Dumik, 2026-01-22]).
+  artifact сохранён (id=1, 20 frag_ids, len 2276). `--topic all --period all`→151 фраг (без фильтра).
+  `--period 1m`→0 (intro датирован янв-март, вне 30 дней) — корректно, fallback "недостаточно".
+- **Замечание:** datetime.utcnow() даёт DeprecationWarning (Py3.14). Оставлено намеренно: БД хранит
+  naive datetime, tz-aware сломает сравнение created_at>=since. Можно заменить позже консистентно.
+- PowerShell заворачивает stderr-лог в NativeCommandError (exit 255), но stdout-дайджест чистый — не баг.
 ---

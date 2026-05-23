@@ -39,7 +39,7 @@
 | 4 | step_4_ingest.md                | [x] |
 | 5 | step_5_enrich.md                | [x] |
 | 6 | step_6_brain_synthesis.md       | [x] |
-| 7 | step_7_delivery_cli.md          | [ ] |
+| 7 | step_7_delivery_cli.md          | [x] |
 | 8 | step_8_smoke.md                 | [ ] |
 | 9 | step_9_completion.md            | [ ] |
 
