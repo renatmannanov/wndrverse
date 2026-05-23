@@ -35,7 +35,7 @@
 |---|------|--------|
 | 1 | step_1_scaffold_docker.md       | [x] |
 | 2 | step_2_store.md                 | [x] |
-| 3 | step_3_llm_layer.md             | [ ] |
+| 3 | step_3_llm_layer.md             | [x] |
 | 4 | step_4_ingest.md                | [ ] |
 | 5 | step_5_enrich.md                | [ ] |
 | 6 | step_6_brain_synthesis.md       | [ ] |

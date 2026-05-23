@@ -79,4 +79,15 @@ intro=знакомство, sales=продажи, boltalka=болталка, ann
   кириллице). Решение: писать .py-файл с `PYTHONUTF8=1` и `PYTHONPATH=<root>` (если файл не в корне).
 - Step-2 тест прошёл: insert пишет topic/author_name/sender_id; get_fragments_for_digest
   фильтрует по topic+since+min_chars(150); created_at возвращается СТРОКОЙ ([:10] работает).
+
+### Шаг 3 (done, 2026-05-23)
+- `core/llm/client.py`: get_openai_client (lazy singleton) + embed + complete.
+  Константы EMBED_MODEL=text-embedding-3-small (1536), COMPLETION_MODEL=gpt-4o-mini.
+  Грузит .env через python-dotenv (для CLI-прогонов). НЕ тащит transcription_service/Whisper.
+- **OPENAI_API_KEY взят из ayda** `03_ayda_think/.env` (len 164), записан в наш `.env`
+  программно (значение не печаталось). `.env` в .gitignore — ключ не закоммитится.
+- Параметры OpenAI сверены с ayda: embeddings.create(model, input=texts) — порядок векторов
+  сохраняется (мэтчинг по позиции); chat.completions.create(model, messages, temperature, max_tokens).
+- Проверено реальными вызовами (юзер разрешил копеечные тесты): embed('тест')→dim1536,
+  embed(['привет','hello'])→2×1536, complete('Скажи ОК')→непустой ответ.
 ---
