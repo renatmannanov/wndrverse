@@ -4,3 +4,13 @@ anthropic>=0.40
 httpx>=0.27
 claude-agent-sdk>=0.1
 # telethon>=1.36   # optional, only if reading channels directly via userbot
+
+# --- community brain (core/) — main pipeline deps ---
+sqlalchemy
+psycopg2-binary
+pgvector>=0.2.0
+openai>=1.0.0
+numpy>=1.24.0
+# clustering deps (hdbscan/umap-learn) live in requirements-clustering.txt —
+# heavy C extensions (need MSVC on Windows), only for the clustering feature
+# (not the MVP digest). Don't block the main install on them.
