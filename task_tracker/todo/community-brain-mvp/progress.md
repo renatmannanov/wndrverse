@@ -90,4 +90,20 @@ intro=знакомство, sales=продажи, boltalka=болталка, ann
   сохраняется (мэтчинг по позиции); chat.completions.create(model, messages, temperature, max_tokens).
 - Проверено реальными вызовами (юзер разрешил копеечные тесты): embed('тест')→dim1536,
   embed(['привет','hello'])→2×1536, complete('Скажи ОК')→непустой ответ.
+
+### Шаг 4 (done, 2026-05-23)
+- `normalize.py` (message_to_fragment + _extract_tags) + `loaders.py` (ingest/load_export_file/
+  load_export_dir, CLI `--dir/--topic`). Единый funnel `ingest(messages)` для будущего realtime.
+- **Формат данных подтверждён по реальному intro:** top keys + msg keys ровно как в плане,
+  date = naive ISO ('2026-01-22T17:24:57') → fromisoformat ок. announcements = ВСЕГО 1 тред
+  (он же null-root!) → если бы скипали null-root целиком, announcements дал бы 0. План прав.
+- **null-root: ровно 1 на КАЖДЫЙ из 10 файлов, у всех есть replies** — обработаны с
+  thread_root_id=None через `_iter_thread_messages`. empty_text=0 во всех файлах (но guard оставлен).
+- **ВАЖНО про дубликаты:** один msg.id появляется в НЕСКОЛЬКИХ тредах (reply-цепочки
+  пересекаются). intro: 360 occurrences → 305 уникальных (= total_messages файла). 55 dup-skipped
+  на ПЕРВОМ прогоне — это норма, не баг. Повторный прогон: 0 inserted / 360 dup-skipped (идемпотентно).
+- **Грабля: env из .env не виден в `python -m core.X` сам по себе.** Добавил load_dotenv()
+  в _main loaders (как в llm.client). Учесть для enrich/delivery CLI тоже.
+- Юнит-тест `tests/test_ingest_normalize.py` зелёный (mapping, empty-text→None, null user_id, tags).
+- intro в БД: 305 фрагментов, sender_id null=0, 2 фрагмента с tags, author_name/thread_id заполнены.
 ---
