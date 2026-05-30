@@ -53,6 +53,19 @@ Needs `.env` (DATABASE_URL, OPENAI_API_KEY, WNDR_EXPORTS_DIR — see `.env.examp
 PII: only text + `[#id]` go to OpenAI; names substituted locally on output.
 `data/` is gitignored — community messages are never committed.
 
+### Realtime ingest bot (bot/) — live group → fragments
+
+```bash
+python -m bot.ingest_bot                             # polling listener (long-lived); module form only
+```
+
+Writes new group messages into `fragments` in realtime via the same `ingest()`
+funnel as the file loader. Needs `BOT_TOKEN_INGEST` (separate bot, privacy mode
+OFF) and a `core/ingest/topic_map.json` mapping `(chat_id, thread_id) → topic`
+(gitignored — holds real chat_ids; copy from `topic_map.example.json`).
+Unknown chats are skipped + logged. Run on Windows with `PYTHONUTF8=1` if the
+console mangles Cyrillic.
+
 ## Key files
 
 - `members.json` — list of participants and their sources
@@ -61,6 +74,7 @@ PII: only text + `[#id]` go to OpenAI; names substituted locally on output.
 - `task_tracker/todo/ARCHITECTURE.md` — full architecture decisions
 - `core/` — community brain (digest pipeline): db / ingest / store / enrich / brain / llm / prompts
 - `delivery/` — digest CLI + output channels (stdout now; telegram = future)
+- `bot/` — realtime ingest bot (polling listener → core ingest)
 - `docker-compose.yml` — postgres+pgvector (db `wndrverse`, port 5434)
 
 ## Env vars
@@ -72,6 +86,8 @@ MY_USERNAME        — your Telegram username
 TG_CHANNEL         — your public TG channel username
 GITHUB_USERNAME    — your GitHub username
 ANTHROPIC_API_KEY  — for Option B (Claude Managed Agent)
+BOT_TOKEN_INGEST   — realtime ingest bot token (separate from BOT_TOKEN; privacy mode OFF)
+WNDR_TOPIC_MAP     — path to topic_map.json (default core/ingest/topic_map.json)
 ```
 
 ## Stack

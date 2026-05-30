@@ -1,6 +1,6 @@
 # realtime-bot-ingest
 
-> Статус: pending
+> Статус: done
 > Дата: 2026-05-30
 > Тип: фича
 > Ветка: feature/realtime-bot-ingest (от feature/community-brain-mvp)
@@ -50,9 +50,9 @@ funnel `core/ingest/loaders.py:ingest()`. Бот пишем **с нуля** — 
 | 2 | step_2_bot_adapter.md       | [x] |
 | 3 | step_3_bot_listener.md      | [x] |
 | 4 | step_4_edge_cases.md        | [x] |
-| 5 | step_5_smoke_one_group.md   | [ ] | блок: токен бота + chat_id группы |
-| 6 | step_6_enrich_digest.md     | [ ] |
-| 7 | step_7_completion.md        | [ ] |
+| 5 | step_5_smoke_one_group.md   | [x] | raymann_agents, 4 фрагмента, дедуп ок |
+| 6 | step_6_enrich_digest.md     | [x] | embed 4/4, digest end-to-end (мало данных для синтеза — ожидаемо) |
+| 7 | step_7_completion.md        | [x] |
 
 ## Критерии готовности
 
