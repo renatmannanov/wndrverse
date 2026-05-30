@@ -1,0 +1,8 @@
+{
+  "mappings": [
+    {"channel_id": -1001111111111, "thread_id": null, "topic": "men"},
+    {"channel_id": -1002222222222, "thread_id": null, "topic": "women"},
+    {"channel_id": -1003333333333, "thread_id": null, "topic": "questions_to_men"},
+    {"channel_id": -1004444444444, "thread_id": null, "topic": "questions_to_women"}
+  ]
+}

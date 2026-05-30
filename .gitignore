@@ -27,6 +27,9 @@ secrets/
 data/
 tmp_msgs.txt
 
+# Topic map: contains real chat_ids (specific path, not *.json — would catch members.json)
+core/ingest/topic_map.json
+
 # OS
 .DS_Store
 Thumbs.db
