@@ -18,6 +18,7 @@ def message_to_fragment(
     *,
     topic: str,
     chat_name: str,
+    chat_id: int | None = None,
     thread_root_id: int | None,
 ) -> dict | None:
     """Map one telegram-gather message to a Fragment dict.
@@ -25,13 +26,23 @@ def message_to_fragment(
     Returns None for service/empty messages (no text) — they are skipped.
     created_at is a datetime object here (insert_fragments_batch takes datetime;
     it becomes a string only on the way OUT of query functions).
+
+    external_id is the dedup key (per-message, must match byte-for-byte across the
+    file backfill and the realtime bot). When chat_id is known we use the unified
+    `tg_{chat_id}_{msg_id}` form; legacy file exports without chat_id fall back to
+    the old `wndr_{chat_name}_{msg_id}` key.
     """
     text = msg.get('text')
     if not text or not text.strip():
         return None
 
+    if chat_id is not None:
+        external_id = f"tg_{chat_id}_{msg['id']}"
+    else:
+        external_id = f"wndr_{chat_name}_{msg['id']}"  # legacy (old exports w/o chat_id)
+
     return {
-        'external_id': f"wndr_{chat_name}_{msg['id']}",  # dedup across runs
+        'external_id': external_id,               # dedup across runs / sources
         'source': 'telegram',
         'text': text,
         'created_at': datetime.fromisoformat(msg['date']),
@@ -40,6 +51,7 @@ def message_to_fragment(
         'sender_id': msg.get('user_id'),          # may be None — don't crash
         'author_name': msg.get('sender_name'),
         'topic': topic,
+        'channel_id': chat_id,                    # backfill previously left this unset
         'message_thread_id': thread_root_id,
         'metadata': {
             'username': msg.get('username'),

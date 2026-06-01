@@ -39,10 +39,11 @@ def bot_message_to_fragment(message, *, topic: str) -> dict | None:
     if frag is None:
         return None  # no text/caption -> skip
 
-    # Overwrite both fields normalize cannot set for a bot source:
-    #  - external_id: chat_id MUST be in the key (message_id collides across chats).
-    #    Replaces normalize's "wndr_tgbot_{id}".
-    #  - channel_id: normalize never set it (files had no chat_id).
-    frag["external_id"] = f"tgbot_{message.chat_id}_{message.message_id}"
+    # Overwrite both fields for a bot source — same unified key as the file
+    # backfill so the same (chat_id, msg_id) dedups to ONE row regardless of path:
+    #  - external_id: `tg_{chat_id}_{msg_id}` (chat_id MUST be in the key —
+    #    message_id collides across chats). Replaces normalize's "wndr_tgbot_{id}".
+    #  - channel_id: normalize was called without chat_id here, so set it now.
+    frag["external_id"] = f"tg_{message.chat_id}_{message.message_id}"
     frag["channel_id"] = message.chat_id
     return frag

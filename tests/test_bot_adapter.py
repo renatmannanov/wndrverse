@@ -30,7 +30,7 @@ def _msg(**over):
 
 def test_basic_text_message():
     f = bot_message_to_fragment(_msg(), topic="men")
-    assert f["external_id"] == "tgbot_-1001111111111_100"   # NOT wndr_tgbot_...
+    assert f["external_id"] == "tg_-1001111111111_100"   # unified key (NOT tgbot_ / wndr_tgbot_)
     assert f["channel_id"] == -1001111111111
     assert f["topic"] == "men"
     assert f["sender_id"] == 42

@@ -62,6 +62,7 @@ def load_export_file(path: str) -> int:
 
     topic = data.get('topic_name') or 'unknown'
     chat_name = data.get('chat_name') or 'wndr'
+    chat_id = data.get('chat_id')   # None for OLD exports (no field) — legacy key
 
     fragments = []
     skipped_no_text = 0
@@ -70,7 +71,8 @@ def load_export_file(path: str) -> int:
     for thread in data.get('threads', []):
         for msg, thread_root_id in _iter_thread_messages(thread):
             frag = message_to_fragment(
-                msg, topic=topic, chat_name=chat_name, thread_root_id=thread_root_id
+                msg, topic=topic, chat_name=chat_name, chat_id=chat_id,
+                thread_root_id=thread_root_id,
             )
             if frag is None:
                 skipped_no_text += 1

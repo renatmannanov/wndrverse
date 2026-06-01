@@ -51,7 +51,7 @@ def test_mapped_message_is_ingested(monkeypatch):
     assert len(calls) == 1
     (frags,) = calls
     assert len(frags) == 1
-    assert frags[0]["external_id"] == "tgbot_-1001111111111_100"
+    assert frags[0]["external_id"] == "tg_-1001111111111_100"
     assert frags[0]["topic"] == "men"
     assert frags[0]["channel_id"] == -1001111111111
 

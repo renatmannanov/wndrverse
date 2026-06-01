@@ -22,8 +22,10 @@ def _msg(**over):
 
 
 def test_basic_mapping():
+    # legacy call (no chat_id) -> old key + channel_id stays None (fallback unbroken)
     f = message_to_fragment(_msg(), topic='intro', chat_name='WNDR chat', thread_root_id=5593)
     assert f['external_id'] == 'wndr_WNDR chat_5595'
+    assert f['channel_id'] is None
     assert f['source'] == 'telegram'
     assert f['sender_id'] == 25533754
     assert f['author_name'] == 'Dmitry Dumik'
@@ -35,6 +37,17 @@ def test_basic_mapping():
     assert f['metadata']['username'] == 'ddumik'
     assert f['metadata']['reactions'] == [{'emoji': '🔥', 'count': 3}]
     print('test_basic_mapping OK')
+
+
+def test_unified_key_with_chat_id():
+    # with chat_id -> unified tg_ key + channel_id set (matches the bot path)
+    f = message_to_fragment(
+        _msg(), topic='intro', chat_name='WNDR chat',
+        chat_id=-1002924475859, thread_root_id=5593,
+    )
+    assert f['external_id'] == 'tg_-1002924475859_5595'
+    assert f['channel_id'] == -1002924475859
+    print('test_unified_key_with_chat_id OK')
 
 
 def test_empty_text_skipped():
@@ -60,6 +73,7 @@ def test_extract_tags():
 
 if __name__ == "__main__":
     test_basic_mapping()
+    test_unified_key_with_chat_id()
     test_empty_text_skipped()
     test_null_user_id_ok()
     test_extract_tags()
