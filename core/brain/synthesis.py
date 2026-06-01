@@ -36,6 +36,12 @@ TOPIC_HINTS = {
     'boltalka': "Топик «болталка»: свободное общение, выдели ценное среди шума.",
     'announcements': "Топик «анонсы»: важные объявления сообщества.",
     'together': "Топик «ретро/вместе»: совместная рефлексия, что получилось у группы.",
+    'questions_to_women': "Топик «вопросы к женскому миру»: мужчины задают вопросы "
+                          "женщинам сообщества. Выдели главные темы вопросов и суть "
+                          "ответов/обсуждений.",
+    'questions_to_men':   "Топик «вопросы к мужскому миру»: женщины задают вопросы "
+                          "мужчинам сообщества. Выдели главные темы вопросов и суть "
+                          "ответов/обсуждений.",
 }
 
 
@@ -128,7 +134,9 @@ def _synthesize_fragments(topic: str, topic_hint: str, fragments: list[dict]) ->
     prompt = _load_prompt("digest_synthesis.md").format(
         topic=topic, topic_hint=topic_hint, fragments_text=fragments_text,
     )
-    return complete(prompt, temperature=0.5)
+    # max_tokens is a CEILING (~4000 chars of Cyrillic ≈ 2200 tokens with headroom),
+    # paired with the soft prompt instruction above. Shorter output is fine.
+    return complete(prompt, temperature=0.5, max_tokens=2200)
 
 
 def _insufficient_data_message(topic: str, fragments: list[dict]) -> str:

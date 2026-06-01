@@ -54,6 +54,18 @@ def test_unknown_channel_returns_none(mapped):
     assert topic_map.resolve_topic(-999, None) is None
 
 
+def test_wndr_forum_topics(mapped):
+    # WNDR supergroup: forum topics, no (chat, None) default -> unknown thread is None.
+    mapped([
+        {"channel_id": -1002924475859, "thread_id": 16139, "topic": "questions_to_women"},
+        {"channel_id": -1002924475859, "thread_id": 16138, "topic": "questions_to_men"},
+    ])
+    assert topic_map.resolve_topic(-1002924475859, 16139) == "questions_to_women"
+    assert topic_map.resolve_topic(-1002924475859, 16138) == "questions_to_men"
+    # no per-channel default for this chat -> unknown thread falls through to None
+    assert topic_map.resolve_topic(-1002924475859, 99999) is None
+
+
 def test_missing_file_is_empty_not_crash(tmp_path, monkeypatch):
     monkeypatch.setenv("WNDR_TOPIC_MAP", str(tmp_path / "does_not_exist.json"))
     topic_map.reload()

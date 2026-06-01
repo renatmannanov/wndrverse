@@ -66,6 +66,21 @@ OFF) and a `core/ingest/topic_map.json` mapping `(chat_id, thread_id) → topic`
 Unknown chats are skipped + logged. Run on Windows with `PYTHONUTF8=1` if the
 console mangles Cyrillic.
 
+### Digest scheduler (digest/) — daily digest → user's DM
+
+```bash
+python -m digest.scheduler                           # sleep-loop: once a day at WNDR_DIGEST_AT
+python -m digest.scheduler --now                     # run once immediately and exit (manual / smoke)
+```
+
+Long-lived stdlib sleep-loop (no APScheduler/cron). Once a day at `WNDR_DIGEST_AT`
+in zone `WNDR_DIGEST_TZ` it synthesizes a digest per `WNDR_DIGEST_TOPICS` and DMs
+it to `WNDR_DIGEST_DM_USER_ID` via the ingest bot, reusing `delivery.cli._run_digest`
+(synth → humanize [#id] locally → send). Topic with 0 fragments for the period is
+skipped (no OpenAI spend). User must `/start` the ingest bot first (Telegram won't
+let a bot message first). Schedule pinned to a named zone so a UTC VPS move won't
+shift the send moment. No missed-run recovery in MVP.
+
 ## Key files
 
 - `members.json` — list of participants and their sources
@@ -75,6 +90,7 @@ console mangles Cyrillic.
 - `core/` — community brain (digest pipeline): db / ingest / store / enrich / brain / llm / prompts
 - `delivery/` — digest CLI + output channels (stdout now; telegram = future)
 - `bot/` — realtime ingest bot (polling listener → core ingest)
+- `digest/` — daily digest scheduler (sleep-loop → core synth → user's DM)
 - `docker-compose.yml` — postgres+pgvector (db `wndrverse`, port 5434)
 
 ## Env vars
@@ -88,6 +104,11 @@ GITHUB_USERNAME    — your GitHub username
 ANTHROPIC_API_KEY  — for Option B (Claude Managed Agent)
 BOT_TOKEN_INGEST   — realtime ingest bot token (separate from BOT_TOKEN; privacy mode OFF)
 WNDR_TOPIC_MAP     — path to topic_map.json (default core/ingest/topic_map.json)
+WNDR_DIGEST_DM_USER_ID — Telegram user_id to DM the digest to (must /start the bot)
+WNDR_DIGEST_TZ     — digest schedule timezone (default Asia/Almaty)
+WNDR_DIGEST_AT     — digest run time HH:MM (default 09:00)
+WNDR_DIGEST_PERIOD — message lookback window (default 1d)
+WNDR_DIGEST_TOPICS — comma-separated topics (default questions_to_women,questions_to_men)
 ```
 
 ## Stack
