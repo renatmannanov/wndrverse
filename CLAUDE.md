@@ -53,6 +53,14 @@ Needs `.env` (DATABASE_URL, OPENAI_API_KEY, WNDR_EXPORTS_DIR — see `.env.examp
 PII: only text + `[#id]` go to OpenAI; names substituted locally on output.
 `data/` is gitignored — community messages are never committed.
 
+**Dedup key:** `external_id = tg_{chat_id}_{msg_id}` — unified across the file
+backfill and the realtime bot so the same message dedups to one row (per-row
+SELECT, not ON CONFLICT — keys must match byte-for-byte). chat_id is the
+`-100…` form. Legacy exports without a `chat_id` field fall back to the old
+`wndr_{chat_name}_{msg_id}` key. Telethon exports come from `telegram-gather`
+(`fetch_topic.py` writes `chat_id`; separate repo). DB backups (`*.sql`) are
+gitignored — they hold PII.
+
 ### Realtime ingest bot (bot/) — live group → fragments
 
 ```bash
