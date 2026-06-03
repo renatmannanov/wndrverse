@@ -20,10 +20,10 @@ After=network-online.target docker.service
 [Service]
 Type=oneshot
 User=rm_agent
-WorkingDirectory=/home/rm_agent/claude-hub/projects/wndrverse
+WorkingDirectory=/home/rm_agent/wndrverse
 Environment=PYTHONUTF8=1
-EnvironmentFile=/home/rm_agent/claude-hub/projects/wndrverse/.env
-ExecStart=/home/rm_agent/claude-hub/projects/wndrverse/.venv/bin/python -m digest.scheduler --now
+EnvironmentFile=/home/rm_agent/wndrverse/.env
+ExecStart=/home/rm_agent/wndrverse/.venv/bin/python -m digest.scheduler --now
 ```
 `/etc/systemd/system/wndr-digest.timer`:
 ```ini
@@ -53,9 +53,10 @@ After=network-online.target docker.service
 [Service]
 Type=oneshot
 User=rm_agent
-WorkingDirectory=/home/rm_agent/claude-hub/projects/wndrverse
-EnvironmentFile=/home/rm_agent/claude-hub/projects/wndrverse/.env
-ExecStart=/home/rm_agent/claude-hub/projects/wndrverse/.venv/bin/python -m core.enrich.embedder
+WorkingDirectory=/home/rm_agent/wndrverse
+Environment=PYTHONUTF8=1
+EnvironmentFile=/home/rm_agent/wndrverse/.env
+ExecStart=/home/rm_agent/wndrverse/.venv/bin/python -m core.enrich.embedder
 ```
 `/etc/systemd/system/wndr-embedder.timer`:
 ```ini
@@ -73,7 +74,16 @@ Embedder тратит OpenAI, но: дёшево (text-embedding-3-small) + ба
 `embedding IS NULL` (дельта с прошлого прогона). Корпус из дампа уже эмбеджен →
 таймер обрабатывает лишь новое от бота. Осознанная периодическая трата (решение 4).
 
-### 3. Запуск
+### 3. Проверить OnCalendar ДО enable (V1)
+Суффикс таймзоны в OnCalendar валиден на systemd v255 (Ubuntu 24.04), но проверяем
+явно, чтобы next-run не оказался «never»:
+```bash
+systemd-analyze calendar "*-*-* 09:00:00 Asia/Almaty"
+systemd-analyze calendar "*-*-* 00,06,12,18:00:00 Asia/Almaty"
+# у обоих: "Next elapse" должен быть конкретной датой/временем, НЕ "never".
+```
+
+### 4. Запуск
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now wndr-digest.timer wndr-embedder.timer

@@ -1,84 +1,132 @@
-# Шаг 1: БД на VPS + перенос корпуса дампом
+# Шаг 1: Docker + БД на VPS + перенос корпуса дампом
 
-> Зависит от: план data-corpus = done (дамп готов)
+> Зависит от: план data-corpus = done (влит в master; корпус 10940, dup=0, unemb=0)
 > Статус: [ ] pending
 
 ## Задача
 
-Развернуть код на VPS, поднять postgres+pgvector, восстановить корпус из дампа
-локальной БД (план data-corpus). ДО — решить каталог core на VPS (решение 6).
+Развернуть код на VPS, поставить Docker, поднять postgres+pgvector, восстановить
+корпус ПОЛНЫМ дампом локальной БД (без предварительного `core.db init`).
 
-### 0. Каталог на VPS
-Deploy-карта (CLAUDE.md) деплоит `wndrverse_agent_claude`. core/bot/digest — в репо
-`wndrverse`. Каталога под пайплайн в карте нет. **Зафиксировано:
-`~/claude-hub/projects/wndrverse`** (туда мигрирует агент по карте; если занято —
-`~/claude-hub/projects/wndrverse-core`). Записать выбор в CLAUDE.md (step_5).
+### Зафиксированные факты (проверено на сервере 2026-06-03)
 
-### 1. Код на VPS
+- **Docker НЕ установлен** (нет docker/podman/нативного postgres). progress.md ранее
+  ошибочно говорил «Docker уже стоит» — НЕВЕРНО. Ставим Docker в п.1.
+- **Каталог на VPS = `~/wndrverse`** (`/home/rm_agent/wndrverse`). НЕ внутри
+  `~/claude-hub` (это отдельный git-репо-scaffold под Claude-агентов; clone туда даёт
+  вложенный git). Этот путь подставлен ВО ВСЕ systemd-юниты step_2/step_3.
+- **sudo passwordless** у rm_agent — работает.
+- **Порт 5434** на VPS свободен (нет ни одного DB-порта).
+- **Ветка = `master`** (data-corpus влит ff, c095854). НО: push на origin локально
+  ещё НЕ сделан — перед clone на VPS нужен `git push origin master` (см. п.0).
+
+### 0. Push master на origin (локально, ДО clone на VPS)
+data-corpus влит в master локально, но НЕ запушен. VPS клонит с GitHub → нужен push.
+```bash
+git log origin/master..master --oneline   # покажет неотправленные коммиты
+git push origin master
+```
+
+### 1. Установить Docker на VPS
 ```bash
 ssh -i ~/.ssh/openclaw_hetzner rm_agent@62.238.31.95
-cd ~/claude-hub/projects
-git clone https://github.com/renatmannanov/wndrverse.git || (cd wndrverse && git pull)
-cd wndrverse
-git checkout <ветка с влитым data-corpus>   # код дедупа должен быть здесь
+sudo apt-get update
+sudo apt-get install -y docker.io docker-compose-v2
+sudo systemctl enable --now docker
+sudo usermod -aG docker rm_agent          # чтобы docker без sudo
+# ПЕРЕЛОГИНИТЬСЯ (новый SSH-сеанс) чтобы группа docker применилась:
+exit
+ssh -i ~/.ssh/openclaw_hetzner rm_agent@62.238.31.95
+docker --version && docker compose version && docker ps   # ps без ошибки прав
+```
+⚠️ Не трогать другие сервисы — Docker ставится с нуля, конфликтов нет (проверено:
+ни OpenClaw, ни Hermes docker не используют — их контейнеров не было).
+
+### 2. Код на VPS
+```bash
+cd ~
+git clone https://github.com/renatmannanov/wndrverse.git   # → ~/wndrverse
+cd ~/wndrverse
+git checkout master                        # код дедупа здесь (data-corpus влит)
+git log --oneline -3                       # убедиться, что виден c095854 (или новее)
 ```
 
-### 2. Зависимости
+### 3. Зависимости (через requirements.txt — V3)
 ```bash
-docker --version && docker compose version   # Docker уже на VPS
 python3 -m venv .venv && source .venv/bin/activate
-pip install python-telegram-bot httpx anthropic sqlalchemy openai pgvector psycopg2-binary python-dotenv
+pip install -r requirements.txt
 ```
 
-### 3. .env + topic_map.json на VPS (секреты вручную, значения НЕ из плана)
-`.env`: DATABASE_URL (дефолт localhost:5434 ок), OPENAI_API_KEY, BOT_TOKEN_INGEST,
-WNDR_DIGEST_DM_USER_ID, WNDR_TOPIC_MAP. Свериться с `.env.example`.
-`topic_map.json`: скопировать из example, вписать реальные chat_id/thread_id.
-`git check-ignore` обоих.
+### 4. .env + topic_map.json на VPS (секреты вручную, значения НЕ из плана)
+`.env` (свериться с `.env.example`):
+- DATABASE_URL (дефолт `postgresql://postgres:postgres@localhost:5434/wndrverse` ок)
+- OPENAI_API_KEY, BOT_TOKEN_INGEST, WNDR_DIGEST_DM_USER_ID, WNDR_TOPIC_MAP
+- WNDR_DIGEST_TOPICS=questions_to_women,questions_to_men (после тестов → расширить)
 
-### 4. Поднять БД (пустую) + схема
+`topic_map.json`: скопировать из `topic_map.example.json`, вписать реальные
+chat_id/thread_id (chat_id=-1002924475859; 16139→questions_to_women;
+16138→questions_to_men).
 ```bash
+git check-ignore .env core/ingest/topic_map.json   # оба должны печататься
+```
+
+### 5. Поднять БД (ПУСТУЮ, БЕЗ init — restore несёт схему сам)
+```bash
+ss -tlnp | grep 5434 || echo "5434 free"     # подтвердить свободу порта
 docker compose up -d db
-docker compose ps            # healthy
-python -m core.db init       # создаёт схему (нужна ДО restore, если дамп без DDL)
+docker compose ps                             # db healthy
+# НЕ запускать `python -m core.db init` — полный дамп уже содержит DDL+extension.
 ```
-Порт 5434 на VPS — проверить, что свободен (не занят ayda/другим). Если занят —
-поменять маппинг в docker-compose.yml ТОЛЬКО на VPS.
 
-### 5. Перенести дамп и восстановить корпус
+### 6. Создать ПОЛНЫЙ дамп локально (K1+K2 — один способ)
 ```bash
-# локально: сделать дамп (если не сделан в data-corpus)
+# ЛОКАЛЬНО (Windows, в каталоге проекта):
 docker compose exec -T db pg_dump -U postgres -d wndrverse > wndrverse_corpus.sql
-# скопировать на VPS:
-scp -i ~/.ssh/openclaw_hetzner wndrverse_corpus.sql rm_agent@62.238.31.95:~/claude-hub/projects/wndrverse/
-# на VPS — восстановить:
+# полный дамп: DDL + CREATE EXTENSION vector + данные + индексы.
+# НЕ --data-only. *.sql уже в .gitignore (подтверждено) → в git не попадёт.
+```
+⚠️ Дамп содержит PII (author_name) — едет на VPS осознанно (решение 2).
+
+### 7. Перенести и восстановить
+```bash
+# ЛОКАЛЬНО: скопировать на VPS
+scp -i ~/.ssh/openclaw_hetzner wndrverse_corpus.sql rm_agent@62.238.31.95:~/wndrverse/
+# НА VPS: восстановить в пустую БД (без предварительного init)
+cd ~/wndrverse
 cat wndrverse_corpus.sql | docker compose exec -T db psql -U postgres -d wndrverse
 ```
-⚠️ Дамп содержит PII (имена в author_name) — едет на VPS (решение 2, осознанно).
-Дамп-файл НЕ коммитить (gitignore `*.sql`).
+Полный дамп воссоздаёт extension+схему+данные одной командой → нет конфликта
+`relation already exists` (тот конфликт был бы при init→restore; init убран).
 
-## Тесты
-
-Инфраструктурный шаг. Проверка — count совпадает с локальной БД.
+### 8. Удалить PII-дамп после успешного restore (V7)
+```bash
+# НА VPS (после проверки count в «Командах для верификации»):
+rm ~/wndrverse/wndrverse_corpus.sql
+# ЛОКАЛЬНО:
+rm wndrverse_corpus.sql
+```
 
 ## Команды для верификации
 
 ```bash
-# на VPS:
+# на VPS, из ~/wndrverse:
 docker compose ps                                   # db healthy
 docker compose exec -T db psql -U postgres -d wndrverse -c \
   "SELECT count(*) AS total, count(*)-count(DISTINCT external_id) AS dup, \
    count(*) FILTER (WHERE embedding IS NULL) AS unemb FROM fragments;"
-# ожидаем: total == локальный count; dup=0; unemb=0
+# ожидаем: total=10940; dup=0; unemb=0  (== локальная БД)
 docker compose exec -T db psql -U postgres -d wndrverse -c \
   "SELECT topic, count(*) FROM fragments GROUP BY topic ORDER BY count(*) DESC;"
+# ожидаем среди прочего: questions_to_women≈339, questions_to_men≈348
 git check-ignore .env core/ingest/topic_map.json
 ```
 
 ## Критерии готовности
 
-- [ ] Каталог core на VPS выбран, зафиксирован (→ CLAUDE.md в step_5).
-- [ ] `docker compose ps` — db healthy на VPS; схема есть.
-- [ ] Корпус восстановлен из дампа: total совпадает с локальным; dup=0; unemb=0.
-- [ ] `.env`, `topic_map.json` на VPS, gitignored. Дамп-файл не в git.
-- [ ] Порт 5434 не конфликтует.
+- [ ] master запушен на origin (clone на VPS видит c095854 или новее).
+- [ ] Docker установлен; `docker ps` без sudo (rm_agent в группе docker).
+- [ ] Код на VPS в `~/wndrverse`, ветка master; `.venv` + `pip -r requirements.txt`.
+- [ ] `docker compose ps` — db healthy; init НЕ запускался.
+- [ ] Корпус восстановлен ПОЛНЫМ дампом: total=10940; dup=0; unemb=0.
+- [ ] `.env`, `topic_map.json` на VPS, gitignored.
+- [ ] PII-дамп `.sql` удалён с VPS и локально после restore.

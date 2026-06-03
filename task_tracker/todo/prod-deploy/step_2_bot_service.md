@@ -25,17 +25,17 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=rm_agent
-WorkingDirectory=/home/rm_agent/claude-hub/projects/wndrverse
+WorkingDirectory=/home/rm_agent/wndrverse
 Environment=PYTHONUTF8=1
-EnvironmentFile=/home/rm_agent/claude-hub/projects/wndrverse/.env
-ExecStart=/home/rm_agent/claude-hub/projects/wndrverse/.venv/bin/python -m bot.ingest_bot
+EnvironmentFile=/home/rm_agent/wndrverse/.env
+ExecStart=/home/rm_agent/wndrverse/.venv/bin/python -m bot.ingest_bot
 Restart=on-failure
 RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
 ```
-WorkingDirectory — фактический каталог из step_1. `PYTHONUTF8=1` — кириллица в логах.
+WorkingDirectory — `~/wndrverse` (зафиксировано в step_1). `PYTHONUTF8=1` — кириллица в логах.
 
 ### 2. Запуск
 ```bash
