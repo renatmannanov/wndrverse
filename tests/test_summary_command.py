@@ -124,15 +124,21 @@ def test_no_args_shows_help(monkeypatch):
 def test_valid_call_dms_the_caller(monkeypatch):
     monkeypatch.setattr(ingest_bot, "ALLOWED", {7})
     calls = []
-    monkeypatch.setattr(ingest_bot, "build_digest",
-                        lambda topic, since, until: calls.append((topic, since, until)) or "DIGEST TEXT")
+    monkeypatch.setattr(
+        ingest_bot, "build_digest",
+        lambda topic, since, until: calls.append((topic, since, until))
+        or {"text": "DIGEST TEXT", "found": 73, "used": 73})
     bot = _FakeBot()
     upd, msg = _update(7)
     asyncio.run(ingest_bot.on_summary(
         upd, _ctx(["questions_to_women", "2026-05-01", "2026-05-31"], bot=bot)))
     assert len(calls) == 1                    # synthesis invoked once
     assert calls[0][0] == "questions_to_women"
-    assert bot.sent == [(7, "DIGEST TEXT")]   # DM'd to the CALLER (uid 7)
+    assert len(bot.sent) == 1
+    chat_id, sent_text = bot.sent[0]
+    assert chat_id == 7                        # DM'd to the CALLER (uid 7)
+    assert "DIGEST TEXT" in sent_text
+    assert "73" in sent_text                   # stats line shows found/used
     assert msg.replies == []                  # no group reply on success
 
 
@@ -151,7 +157,8 @@ def test_forbidden_dm_hints_start(monkeypatch):
     from telegram.error import Forbidden
 
     monkeypatch.setattr(ingest_bot, "ALLOWED", {7})
-    monkeypatch.setattr(ingest_bot, "build_digest", lambda *a, **k: "TEXT")
+    monkeypatch.setattr(ingest_bot, "build_digest",
+                        lambda *a, **k: {"text": "TEXT", "found": 5, "used": 5})
 
     class _ForbidBot:
         async def send_message(self, chat_id, text):
