@@ -17,9 +17,9 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from core.ingest.loaders import ingest
 from core.ingest.bot_adapter import bot_message_to_fragment
 from core.ingest.topic_map import resolve_topic
-from core.brain.synthesis import TOPIC_HINTS
+from core.brain.synthesis import TOPIC_HINTS, MAX_FRAGMENTS_WITHOUT_SELECTION
 from core.store.fragments_db import get_topics_with_counts
-from delivery.cli import build_digest, parse_date_range
+from delivery.cli import build_digest, count_fragments, parse_date_range
 
 logger = logging.getLogger(__name__)
 
@@ -156,10 +156,30 @@ async def on_summary(update, context):
         await update.message.reply_text(str(e))
         return
 
+    from_s, till_s = args[1], args[2]
     logger.info("summary user=%s topic=%s %s..%s", user_id, topic, since, until)
 
-    # 4. select + synthesize off the event loop. build_digest returns None for
-    #    an empty period -> reply without spending OpenAI.
+    # 4. ACK first (cheap count, no OpenAI) so the caller sees it picked up the
+    #    request before the slow synthesis. 0 fragments -> stop here, no spend.
+    try:
+        found = await asyncio.to_thread(count_fragments, topic, since, until)
+    except Exception:
+        logger.exception("summary count FAILED user=%s topic=%s", user_id, topic)
+        await update.message.reply_text("Не удалось обработать запрос — ошибка на сервере.")
+        return
+
+    if found == 0:
+        await update.message.reply_text(
+            f"Топик: {topic} | Период: {from_s}..{till_s}\nЗа этот период сообщений нет.")
+        logger.info("summary EMPTY user=%s topic=%s", user_id, topic)
+        return
+
+    await update.message.reply_text(
+        f"Топик: {topic} | Период: {from_s}..{till_s}\n"
+        f"Найдено {found} сообщений, передаю в модель максимум "
+        f"{MAX_FRAGMENTS_WITHOUT_SELECTION}. Собираю саммари…")
+
+    # 5. synthesize off the event loop.
     try:
         result = await asyncio.to_thread(build_digest, topic, since, until)
     except Exception:
@@ -167,23 +187,18 @@ async def on_summary(update, context):
         await update.message.reply_text("Не удалось собрать саммари — ошибка на сервере.")
         return
 
-    if result is None:
+    if result is None:  # race: emptied between count and synth — no spend happened
         await update.message.reply_text("За этот период по топику нет сообщений.")
-        logger.info("summary EMPTY user=%s topic=%s", user_id, topic)
         return
 
-    # 4.1 prepend a stats line: found in the period vs fed to the model.
-    found, used = result['found'], result['used']
-    stats = f"📊 Сообщений за период: {found}, передано в модель: {used}\n\n"
-    text = (stats + result['text'])[:TG_MSG_LIMIT]
-
-    # 5. deliver to the CALLER's DM (not the group, not the fixed DM_USER_ID).
-    #    Always DM the caller — never the group, even when a topic channel is
-    #    added later (this stat + the digest are private to the requester).
+    # 6. deliver the digest as its OWN message to the CALLER's DM. Kept clean
+    #    (no stats line) so it can later be forwarded to a dedicated topic as-is.
+    #    Always DM the caller, never the group.
+    digest = result['text'][:TG_MSG_LIMIT]
     try:
-        await context.bot.send_message(chat_id=user_id, text=text)
+        await context.bot.send_message(chat_id=user_id, text=digest)
         logger.info("summary SENT user=%s topic=%s found=%d used=%d len=%d",
-                    user_id, topic, found, used, len(text))
+                    user_id, topic, found, result['used'], len(digest))
     except Forbidden:
         await update.message.reply_text(
             "Напиши мне в личку и нажми /start, чтобы я мог прислать саммари.")

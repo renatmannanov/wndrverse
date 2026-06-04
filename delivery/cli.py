@@ -100,6 +100,19 @@ def humanize_refs(content: str, fragment_ids: list[int]) -> str:
     return _REF_RE.sub(repl, content)
 
 
+def count_fragments(
+    topic_arg: str,
+    since: datetime | None = None,
+    until: datetime | None = None,
+) -> int:
+    """How many fragments the period has (cheap DB query, no OpenAI).
+
+    Lets the bot send an immediate ack ('found N') BEFORE the slow synthesis.
+    """
+    topic = None if topic_arg == "all" else topic_arg
+    return len(get_fragments_for_digest(topic=topic, since=since, until=until))
+
+
 def build_digest(
     topic_arg: str,
     since: datetime | None = None,

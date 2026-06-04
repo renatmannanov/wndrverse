@@ -98,12 +98,14 @@ def _update(uid):
 def test_denied_user_does_not_call_synthesis(monkeypatch):
     monkeypatch.setattr(ingest_bot, "ALLOWED", {111})
     called = []
+    monkeypatch.setattr(ingest_bot, "count_fragments",
+                        lambda *a, **k: called.append(("count",)) or 73)
     monkeypatch.setattr(ingest_bot, "build_digest",
-                        lambda *a, **k: called.append(a) or "x")
+                        lambda *a, **k: called.append(("synth",)) or "x")
     upd, msg = _update(999)  # not whitelisted
     asyncio.run(ingest_bot.on_summary(
         upd, _ctx(["questions_to_women", "2026-05-01", "2026-05-31"])))
-    assert called == []                       # OpenAI path never reached
+    assert called == []                       # neither count nor synth reached
     assert msg.replies and "администратор" in msg.replies[0].lower()
 
 
@@ -112,6 +114,8 @@ def test_no_args_shows_help(monkeypatch):
     monkeypatch.setattr(ingest_bot, "get_topics_with_counts",
                         lambda **k: [("questions_to_women", 120)])
     called = []
+    monkeypatch.setattr(ingest_bot, "count_fragments",
+                        lambda *a, **k: called.append(a) or 0)
     monkeypatch.setattr(ingest_bot, "build_digest",
                         lambda *a, **k: called.append(a))
     upd, msg = _update(7)
@@ -121,8 +125,9 @@ def test_no_args_shows_help(monkeypatch):
     assert "questions_to_women (120)" in msg.replies[0]
 
 
-def test_valid_call_dms_the_caller(monkeypatch):
+def test_valid_call_acks_then_dms_clean_digest(monkeypatch):
     monkeypatch.setattr(ingest_bot, "ALLOWED", {7})
+    monkeypatch.setattr(ingest_bot, "count_fragments", lambda *a, **k: 73)
     calls = []
     monkeypatch.setattr(
         ingest_bot, "build_digest",
@@ -134,29 +139,38 @@ def test_valid_call_dms_the_caller(monkeypatch):
         upd, _ctx(["questions_to_women", "2026-05-01", "2026-05-31"], bot=bot)))
     assert len(calls) == 1                    # synthesis invoked once
     assert calls[0][0] == "questions_to_women"
+    # ack reply: found count + period, sent BEFORE synthesis
+    assert msg.replies and "73" in msg.replies[0]
+    assert "2026-05-01..2026-05-31" in msg.replies[0]
+    # digest: its own DM to the caller, CLEAN (no stats line)
     assert len(bot.sent) == 1
     chat_id, sent_text = bot.sent[0]
     assert chat_id == 7                        # DM'd to the CALLER (uid 7)
-    assert "DIGEST TEXT" in sent_text
-    assert "73" in sent_text                   # stats line shows found/used
-    assert msg.replies == []                  # no group reply on success
+    assert sent_text == "DIGEST TEXT"          # clean, no prefix
+    assert "Найдено" not in sent_text          # stats stay in the ack only
 
 
-def test_empty_period_no_spend_reply(monkeypatch):
+def test_empty_period_no_spend(monkeypatch):
+    """0 fragments -> ack says 'нет', build_digest NEVER called (no OpenAI)."""
     monkeypatch.setattr(ingest_bot, "ALLOWED", {7})
-    monkeypatch.setattr(ingest_bot, "build_digest", lambda *a, **k: None)  # 0 frags
+    monkeypatch.setattr(ingest_bot, "count_fragments", lambda *a, **k: 0)
+    synth_calls = []
+    monkeypatch.setattr(ingest_bot, "build_digest",
+                        lambda *a, **k: synth_calls.append(a))
     bot = _FakeBot()
     upd, msg = _update(7)
     asyncio.run(ingest_bot.on_summary(
         upd, _ctx(["questions_to_women", "2026-05-01", "2026-05-31"], bot=bot)))
-    assert bot.sent == []                      # nothing sent
-    assert msg.replies and "нет сообщений" in msg.replies[0]
+    assert synth_calls == []                    # no OpenAI spend
+    assert bot.sent == []                       # no digest sent
+    assert msg.replies and "нет" in msg.replies[0].lower()
 
 
 def test_forbidden_dm_hints_start(monkeypatch):
     from telegram.error import Forbidden
 
     monkeypatch.setattr(ingest_bot, "ALLOWED", {7})
+    monkeypatch.setattr(ingest_bot, "count_fragments", lambda *a, **k: 5)
     monkeypatch.setattr(ingest_bot, "build_digest",
                         lambda *a, **k: {"text": "TEXT", "found": 5, "used": 5})
 
@@ -167,4 +181,5 @@ def test_forbidden_dm_hints_start(monkeypatch):
     upd, msg = _update(7)
     asyncio.run(ingest_bot.on_summary(
         upd, _ctx(["questions_to_women", "2026-05-01", "2026-05-31"], bot=_ForbidBot())))
-    assert msg.replies and "/start" in msg.replies[0]
+    # ack (reply 0) + forbidden hint (reply 1)
+    assert any("/start" in r for r in msg.replies)
