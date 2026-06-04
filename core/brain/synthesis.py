@@ -5,9 +5,11 @@ Ported from ayda synthesis_service, rewritten for a COMMUNITY digest (not one
 person's thought evolution). Prompts live in core/prompts/*.md. LLM via
 core.llm.client.complete.
 
-PII: fragments are fed to the LLM as "[#id] (date)\\ntext" — no author_name /
-username. The digest comes back with [#id] refs; names are substituted locally
-on output (delivery), never sent to OpenAI.
+PII: fragments are grouped by author in code (before synthesis) and fed to the
+LLM as "[@N] (k сообщ.):\\ntext1\\n---\\ntext2" — no author_name / username. [@N]
+is an anonymous per-author key; the digest comes back with [@N] refs and the real
+names are substituted locally on output (delivery) via author_refs {N: name},
+never sent to OpenAI.
 """
 
 import os
@@ -59,9 +61,12 @@ def synthesize(topic: str, fragments: list[dict], topic_type: str | None = None)
 
     fragments: [{id, text, created_at(str), author_name, sender_id, tags}, ...] by date.
     topic_type: semantic key for the prompt hint (defaults to topic).
-    Returns {'content': str, 'fragment_ids': [int], 'found': int, 'model': str}.
+    Returns {'content': str, 'fragment_ids': [int], 'author_refs': {N: name},
+    'found': int, 'model': str}.
     'found' = how many fragments came in (the period total); fragment_ids =
     those actually fed into synthesis (all of them, unless Pass-1 trimmed).
+    author_refs maps the anonymous [@N] key to a display name (from the DB) for
+    local substitution — it never goes to OpenAI and must not be logged (PII).
     """
     topic_type = topic_type or topic
     topic_hint = TOPIC_HINTS.get(topic_type, "")
@@ -70,7 +75,7 @@ def synthesize(topic: str, fragments: list[dict], topic_type: str | None = None)
     if len(fragments) < 3:
         content = _insufficient_data_message(topic, fragments)
         return {'content': content, 'fragment_ids': [f['id'] for f in fragments],
-                'found': found, 'model': COMPLETION_MODEL}
+                'author_refs': {}, 'found': found, 'model': COMPLETION_MODEL}
 
     # Hard-cap input BEFORE Pass 1: take the most recent by date (context guard).
     if len(fragments) > INPUT_HARD_CAP:
@@ -87,17 +92,67 @@ def synthesize(topic: str, fragments: list[dict], topic_type: str | None = None)
     else:
         selected = fragments
 
+    # Group selected fragments BY AUTHOR (in code — the LLM never sees names, so
+    # it cannot group "по человеку" itself). One [@N] block per author.
+    grouped_text, author_refs = _group_by_author(selected)
+
     # Pass 2: synthesis.
-    logger.info("Pass 2: synthesizing %d fragments on '%s'", len(selected), topic)
-    content = _synthesize_fragments(topic, topic_hint, selected)
+    logger.info("Pass 2: synthesizing %d fragments (%d authors) on '%s'",
+                len(selected), len(author_refs), topic)
+    content = _synthesize_fragments(topic, topic_hint, grouped_text)
 
     result = {
         'content': content,
         'fragment_ids': [f['id'] for f in selected],
+        'author_refs': author_refs,   # {N: name} — PII, local substitution only
         'found': found,
         'model': COMPLETION_MODEL,
     }
     return result
+
+
+def _author_key(f: dict):
+    """Stable per-author key: sender_id if present, else author_name, else anon.
+
+    Anonymous messages (no sender_id, no author_name) each become their own
+    "author" — we can't tell them apart, so we don't merge them.
+    """
+    if f.get('sender_id') is not None:
+        return ('id', f['sender_id'])
+    if f.get('author_name'):
+        return ('name', f['author_name'])
+    return ('anon', f['id'])
+
+
+def _group_by_author(fragments: list[dict]) -> tuple[str, dict[int, str]]:
+    """Group fragments by author, preserving first-seen (date) order.
+
+    Returns (grouped_text, author_refs):
+      grouped_text feeds the LLM — each author is one [@N] block with all their
+        texts joined by '---'. NO names: PII never leaves this process.
+      author_refs maps N -> display name (from the DB), for local substitution
+        of [@N] -> [name] after synthesis.
+    """
+    order: list = []        # author keys, first-seen order
+    by_key: dict = {}       # key -> {'name': str, 'texts': [str]}
+    for f in sorted(fragments, key=lambda x: x['created_at'] or ''):
+        k = _author_key(f)
+        if k not in by_key:
+            order.append(k)
+            has_real_author = f.get('sender_id') is not None or f.get('author_name')
+            name = f.get('author_name') if has_real_author else 'аноним'
+            by_key[k] = {'name': name or 'аноним', 'texts': []}
+        by_key[k]['texts'].append(f['text'])
+
+    blocks: list[str] = []
+    author_refs: dict[int, str] = {}
+    for n, k in enumerate(order, start=1):
+        author_refs[n] = by_key[k]['name']
+        texts = by_key[k]['texts']
+        joined = "\n---\n".join(texts)
+        head = f"[@{n}] ({len(texts)} сообщ.):" if len(texts) > 1 else f"[@{n}]:"
+        blocks.append(f"{head}\n{joined}")
+    return "\n\n".join(blocks), author_refs
 
 
 def _select_fragments(topic: str, topic_hint: str, fragments: list[dict]) -> set[int]:
@@ -138,27 +193,31 @@ def _select_fragments(topic: str, topic_hint: str, fragments: list[dict]) -> set
     return selected
 
 
-def _synthesize_fragments(topic: str, topic_hint: str, fragments: list[dict]) -> str:
-    """Pass 2: build the digest. No names sent — only [#id] (date) text."""
-    fragments_text = "\n\n".join(
-        f"[#{f['id']}] ({(f['created_at'] or '')[:10]})\n{f['text']}"
-        for f in fragments
-    )
+def _synthesize_fragments(topic: str, topic_hint: str, grouped_text: str) -> str:
+    """Pass 2: build the digest from author-grouped text.
+
+    grouped_text is already grouped by author (see _group_by_author): each author
+    is one [@N] block. No names sent — only [@N] keys + texts.
+    """
     prompt = _load_prompt("digest_synthesis.md").format(
-        topic=topic, topic_hint=topic_hint, fragments_text=fragments_text,
+        topic=topic, topic_hint=topic_hint, fragments_text=grouped_text,
     )
     # max_tokens is a CEILING (~4000 chars of Cyrillic ≈ 2200 tokens with headroom),
     # paired with the soft prompt instruction above. Shorter output is fine.
-    # temperature low (0.2) so repeat runs of the same period are near-identical
-    # — keeps language alive but stops two callers getting different digests.
-    return complete(prompt, temperature=0.2, max_tokens=2200)
+    # temperature 0.4: livelier, less templated phrasing. Names are pinned by the
+    # [@N] contract (substituted locally), so a higher temp can't desync them.
+    return complete(prompt, temperature=0.4, max_tokens=2200)
 
 
 def _insufficient_data_message(topic: str, fragments: list[dict]) -> str:
+    """<3 fragments: a plain listing. Uses real names directly (this branch is
+    self-contained — it never goes through the [@N] -> [name] substitution)."""
     lines = [f"По топику «{topic}» найдено только {len(fragments)} сообщений — "
              f"недостаточно для дайджеста.\n"]
     for f in fragments:
-        lines.append(f"• [#{f['id']}] ({(f['created_at'] or '')[:10]}) {f['text'][:150]}")
+        has_real_author = f.get('sender_id') is not None or f.get('author_name')
+        name = (f.get('author_name') if has_real_author else 'аноним') or 'аноним'
+        lines.append(f"• [{name}] ({(f['created_at'] or '')[:10]}) {f['text'][:150]}")
     return "\n".join(lines)
 
 
