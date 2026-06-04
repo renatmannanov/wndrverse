@@ -82,7 +82,7 @@ class _FakeBot:
     def __init__(self):
         self.sent = []
 
-    async def send_message(self, chat_id, text):
+    async def send_message(self, chat_id, text, parse_mode=None):
         self.sent.append((chat_id, text))
 
 
@@ -175,7 +175,7 @@ def test_forbidden_dm_hints_start(monkeypatch):
                         lambda *a, **k: {"text": "TEXT", "found": 5, "used": 5})
 
     class _ForbidBot:
-        async def send_message(self, chat_id, text):
+        async def send_message(self, chat_id, text, parse_mode=None):
             raise Forbidden("blocked")
 
     upd, msg = _update(7)
