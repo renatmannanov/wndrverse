@@ -110,7 +110,7 @@ def test_denied_user_does_not_call_synthesis(monkeypatch):
 def test_no_args_shows_help(monkeypatch):
     monkeypatch.setattr(ingest_bot, "ALLOWED", {7})
     monkeypatch.setattr(ingest_bot, "get_topics_with_counts",
-                        lambda: [("questions_to_women", 120)])
+                        lambda **k: [("questions_to_women", 120)])
     called = []
     monkeypatch.setattr(ingest_bot, "build_digest",
                         lambda *a, **k: called.append(a))

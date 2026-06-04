@@ -79,6 +79,9 @@ class _FakeQuery:
     def order_by(self, *args):
         return self
 
+    def group_by(self, *args):
+        return self
+
     def all(self):
         return []
 
@@ -123,3 +126,20 @@ def test_no_bounds_behaves_as_before(monkeypatch):
     n = _patched_count(monkeypatch, topic="t", since=None, until=None)
     # base filters: is_duplicate, topic, min_chars = 3 (no date bounds)
     assert n == 3
+
+
+def test_topics_only_filter_adds_an_in_clause(monkeypatch):
+    """get_topics_with_counts(only=...) adds one extra filter (topic IN only)."""
+    from core.store import fragments_db
+
+    def count(only):
+        recorder = []
+        monkeypatch.setattr(fragments_db, "SessionLocal",
+                            lambda: _FakeSession(recorder))
+        fragments_db.get_topics_with_counts(only=only)
+        return len(recorder)
+
+    base = count(None)               # is_duplicate, min_chars, topic IS NOT NULL = 3
+    restricted = count({"a", "b"})   # + topic IN (...) = 4
+    assert base == 3
+    assert restricted == base + 1

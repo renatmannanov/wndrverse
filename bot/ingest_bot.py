@@ -81,7 +81,8 @@ def validate_summary_args(args: list[str]) -> tuple[str, object, object]:
 def _summary_help() -> str:
     """Format help + the list of topics that actually have fragments."""
     try:
-        topics = get_topics_with_counts()
+        # only known topics (TOPIC_HINTS) — stray/foreign mappings don't surface
+        topics = get_topics_with_counts(only=set(TOPIC_HINTS))
     except Exception:
         logger.exception("summary: failed to list topics")
         topics = []
