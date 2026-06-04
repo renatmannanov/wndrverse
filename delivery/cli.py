@@ -54,6 +54,30 @@ def parse_period(period: str) -> datetime | None:
     return datetime.utcnow() - delta
 
 
+def parse_date_range(from_s: str, till_s: str) -> tuple[datetime, datetime]:
+    """Translate two YYYY-MM-DD strings into (since, until) for the digest query.
+
+    The range is INCLUSIVE on both ends by day:
+      since = date_from at 00:00 (UTC)
+      until = date_till + 1 day at 00:00 (UTC)  — EXCLUSIVE upper bound
+    so a fragment at 23:59 on date_till is included (created_at < until).
+    Dates are treated as UTC midnight (MVP; created_at in the DB is UTC).
+
+    Raises ValueError on a malformed date or if from > till — the caller turns
+    this into a friendly reply and never spends OpenAI on it.
+    """
+    try:
+        since = datetime.strptime(from_s, "%Y-%m-%d")
+        till = datetime.strptime(till_s, "%Y-%m-%d")
+    except ValueError:
+        raise ValueError(
+            f"bad date (use YYYY-MM-DD): {from_s!r} / {till_s!r}")
+    if since > till:
+        raise ValueError(f"from > till: {from_s} > {till_s}")
+    until = till + timedelta(days=1)
+    return since, until
+
+
 def humanize_refs(content: str, fragment_ids: list[int]) -> str:
     """Replace [#id] refs in the digest with [author_name, date], from the local DB.
 
@@ -76,17 +100,44 @@ def humanize_refs(content: str, fragment_ids: list[int]) -> str:
     return _REF_RE.sub(repl, content)
 
 
-def _run_digest(topic_arg: str, period: str, channel: str) -> int:
+def build_digest(
+    topic_arg: str,
+    since: datetime | None = None,
+    until: datetime | None = None,
+) -> str | None:
+    """Core: select → synthesize → humanize [#id] refs locally → return text.
+
+    The single shared synthesis path used by BOTH the scheduler (fixed period)
+    and the bot's /summary command (exact date range). No sending — the caller
+    picks the channel.
+
+    Returns the humanized digest text, or None if there were 0 fragments for the
+    range (so the caller can skip OpenAI spend on an empty period — synthesis is
+    never called in that case).
+
+    until is the UPPER bound EXCLUSIVE (see get_fragments_for_digest).
+    """
     topic = None if topic_arg == "all" else topic_arg
-    since = parse_period(period)
     topic_type = topic_arg if topic_arg in TOPIC_HINTS else None
 
-    fragments = get_fragments_for_digest(topic=topic, since=since)
-    logger.info("digest topic=%s period=%s → %d fragments", topic_arg, period, len(fragments))
+    fragments = get_fragments_for_digest(topic=topic, since=since, until=until)
+    logger.info("digest topic=%s since=%s until=%s → %d fragments",
+                topic_arg, since, until, len(fragments))
+    if not fragments:
+        return None  # no spend on an empty period
 
     result = synthesize_and_save(topic_arg, fragments, topic_type=topic_type)
-    humanized = humanize_refs(result['content'], result['fragment_ids'])
-    channels.send(humanized, channel=channel)
+    return humanize_refs(result['content'], result['fragment_ids'])
+
+
+def _run_digest(topic_arg: str, period: str, channel: str) -> int:
+    since = parse_period(period)
+    text = build_digest(topic_arg, since=since)
+    if text is None:
+        logger.info("digest topic=%s period=%s → 0 fragments, nothing to send",
+                    topic_arg, period)
+        return 0
+    channels.send(text, channel=channel)
     return 0
 
 
