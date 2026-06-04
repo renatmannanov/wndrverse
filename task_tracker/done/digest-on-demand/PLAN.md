@@ -1,6 +1,6 @@
 # digest-on-demand
 
-> Статус: pending
+> Статус: done
 > Дата: 2026-06-04
 > Тип: фича (команда саммари в боте + выборка по диапазону дат)
 > Ветка: feature/digest-on-demand (от master)
@@ -69,21 +69,21 @@
 |---|------|--------|
 | 1 | step_1_prompt_and_date_range.md | [x] |
 | 2 | step_2_summary_command.md       | [x] |
-| 3 | step_3_deploy_and_smoke.md      | [ ] |
-| 4 | step_4_completion.md            | [ ] |
+| 3 | step_3_deploy_and_smoke.md      | [x] |
+| 4 | step_4_completion.md            | [x] |
 
 ## Критерии готовности
 
-- [ ] Промпт без блока коннектов; саммари выходит с 3 блоками.
-- [ ] `get_fragments_for_digest` принимает `until`; выборка по `from..till` верна
+- [x] Промпт без блока коннектов; саммари выходит с 3 блоками.
+- [x] `get_fragments_for_digest` принимает `until`; выборка по `from..till` верна
       (юнит-тест на границы: фрагмент ровно в date_from и ровно в date_till попадает).
-- [ ] `/summary <topic> <YYYY-MM-DD> <YYYY-MM-DD>` в боте: вайт-лист пускает своих,
+- [x] `/summary <topic> <YYYY-MM-DD> <YYYY-MM-DD>` в боте: вайт-лист пускает своих,
       чужих отказывает; синтез по диапазону; ответ в ЛС вызвавшему; PII локальная.
-- [ ] Невалидный ввод (плохая дата, неизвестный топик, from>till, 0 фрагментов) —
+- [x] Невалидный ввод (плохая дата, неизвестный топик, from>till, 0 фрагментов) —
       понятное сообщение, НЕ трата OpenAI на пустоте, бот не падает.
-- [ ] Тесты зелёные (`pytest tests/ -q`); существующий ingest/digest не сломан.
-- [ ] Задеплоено на VPS, бот перезапущен, прод-smoke реальной командой прошёл.
-- [ ] CLAUDE.md обновлён (команда /summary, env WNDR_SUMMARY_ALLOWED).
+- [x] Тесты зелёные (`pytest tests/ -q`); существующий ingest/digest не сломан.
+- [x] Задеплоено на VPS, бот перезапущен, прод-smoke реальной командой прошёл.
+- [x] CLAUDE.md обновлён (команда /summary, env WNDR_SUMMARY_ALLOWED).
 
 ## Что НЕ в этой задаче (scope creep)
 
