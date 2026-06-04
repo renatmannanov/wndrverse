@@ -18,7 +18,11 @@ from core.store.fragments_db import save_artifact
 
 logger = logging.getLogger(__name__)
 
-MAX_FRAGMENTS_WITHOUT_SELECTION = 30   # below this, no Pass-1 selection
+# A/B/C tested 2026-06-04 on questions_to_women May (73 msgs): synthesizing ALL
+# fragments beat Pass-1 selection (5 themes vs 3, and cheaper — no Pass-1 call).
+# So we only fall back to Pass-1 selection for genuinely large periods; a month
+# of one topic (typ. 45–130 msgs) now goes whole into synthesis.
+MAX_FRAGMENTS_WITHOUT_SELECTION = 150  # below this, no Pass-1 selection
 SELECTION_TARGET = 20                   # Pass 1 picks ~this many
 INPUT_HARD_CAP = 800                    # cap fed into Pass 1 (last-by-date) — context guard
 
@@ -55,15 +59,18 @@ def synthesize(topic: str, fragments: list[dict], topic_type: str | None = None)
 
     fragments: [{id, text, created_at(str), author_name, sender_id, tags}, ...] by date.
     topic_type: semantic key for the prompt hint (defaults to topic).
-    Returns {'content': str, 'fragment_ids': [int], 'model': str}.
+    Returns {'content': str, 'fragment_ids': [int], 'found': int, 'model': str}.
+    'found' = how many fragments came in (the period total); fragment_ids =
+    those actually fed into synthesis (all of them, unless Pass-1 trimmed).
     """
     topic_type = topic_type or topic
     topic_hint = TOPIC_HINTS.get(topic_type, "")
+    found = len(fragments)
 
     if len(fragments) < 3:
         content = _insufficient_data_message(topic, fragments)
         return {'content': content, 'fragment_ids': [f['id'] for f in fragments],
-                'model': COMPLETION_MODEL}
+                'found': found, 'model': COMPLETION_MODEL}
 
     # Hard-cap input BEFORE Pass 1: take the most recent by date (context guard).
     if len(fragments) > INPUT_HARD_CAP:
@@ -87,15 +94,21 @@ def synthesize(topic: str, fragments: list[dict], topic_type: str | None = None)
     result = {
         'content': content,
         'fragment_ids': [f['id'] for f in selected],
+        'found': found,
         'model': COMPLETION_MODEL,
     }
     return result
 
 
 def _select_fragments(topic: str, topic_hint: str, fragments: list[dict]) -> set[int]:
-    """Pass 1: LLM picks most relevant fragment IDs. No names sent — only id+date+text."""
+    """Pass 1: LLM picks most relevant fragment IDs. No names sent — only id+date+text.
+
+    Full text (no truncation): the A/B/C test showed truncating to 100 chars made
+    Pass-1 pick by message *openings* and miss the substance, dropping whole themes.
+    Pass-1 only runs for large periods anyway (> MAX_FRAGMENTS_WITHOUT_SELECTION).
+    """
     fragments_list = "\n".join(
-        f"[{f['id']}] {(f['created_at'] or '')[:10]} — {f['text'][:100]}"
+        f"[{f['id']}] {(f['created_at'] or '')[:10]} — {f['text']}"
         for f in fragments
     )
     prompt = _load_prompt("digest_selection.md").format(

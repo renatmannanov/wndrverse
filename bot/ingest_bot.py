@@ -161,21 +161,29 @@ async def on_summary(update, context):
     # 4. select + synthesize off the event loop. build_digest returns None for
     #    an empty period -> reply without spending OpenAI.
     try:
-        text = await asyncio.to_thread(build_digest, topic, since, until)
+        result = await asyncio.to_thread(build_digest, topic, since, until)
     except Exception:
         logger.exception("summary synth FAILED user=%s topic=%s", user_id, topic)
         await update.message.reply_text("Не удалось собрать саммари — ошибка на сервере.")
         return
 
-    if text is None:
+    if result is None:
         await update.message.reply_text("За этот период по топику нет сообщений.")
         logger.info("summary EMPTY user=%s topic=%s", user_id, topic)
         return
 
+    # 4.1 prepend a stats line: found in the period vs fed to the model.
+    found, used = result['found'], result['used']
+    stats = f"📊 Сообщений за период: {found}, передано в модель: {used}\n\n"
+    text = (stats + result['text'])[:TG_MSG_LIMIT]
+
     # 5. deliver to the CALLER's DM (not the group, not the fixed DM_USER_ID).
+    #    Always DM the caller — never the group, even when a topic channel is
+    #    added later (this stat + the digest are private to the requester).
     try:
-        await context.bot.send_message(chat_id=user_id, text=text[:TG_MSG_LIMIT])
-        logger.info("summary SENT user=%s topic=%s len=%d", user_id, topic, len(text))
+        await context.bot.send_message(chat_id=user_id, text=text)
+        logger.info("summary SENT user=%s topic=%s found=%d used=%d len=%d",
+                    user_id, topic, found, used, len(text))
     except Forbidden:
         await update.message.reply_text(
             "Напиши мне в личку и нажми /start, чтобы я мог прислать саммари.")

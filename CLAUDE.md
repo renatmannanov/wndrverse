@@ -81,8 +81,15 @@ fail-closed). `/summary` with no args replies with the format + the list of
 topics that actually have fragments. Unknown topic / bad date / from>till → a
 friendly reply with no OpenAI spend; 0 fragments for the range → "нет сообщений"
 (also no spend). Reuses `delivery.cli.build_digest` (the shared synth+humanize
-core), so PII stays local ([#id] → [name, date] from the DB). The caller must
+core), so PII stays local ([#id] → [name, date] from the DB). The reply is
+prefixed with a stats line (found in period vs fed to the model). The caller must
 `/start` the bot in DM first, else the result reply hints `/start`.
+
+Synthesis (`core/brain/synthesis.py`): for ≤ `MAX_FRAGMENTS_WITHOUT_SELECTION`
+(=150) fragments the whole period is fed to the model in one pass; above that a
+Pass-1 LLM selection trims to ~20 (now over FULL text, not 100-char previews).
+The 150 threshold + full-text selection came from a 2026-06-04 A/B/C test:
+synthesizing all messages of a monthly range beat selection (more themes, cheaper).
 
 ### Digest scheduler (digest/) — daily digest → user's DM
 

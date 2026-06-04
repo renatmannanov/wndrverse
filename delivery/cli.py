@@ -104,16 +104,17 @@ def build_digest(
     topic_arg: str,
     since: datetime | None = None,
     until: datetime | None = None,
-) -> str | None:
-    """Core: select → synthesize → humanize [#id] refs locally → return text.
+) -> dict | None:
+    """Core: select → synthesize → humanize [#id] refs locally → return result.
 
     The single shared synthesis path used by BOTH the scheduler (fixed period)
     and the bot's /summary command (exact date range). No sending — the caller
     picks the channel.
 
-    Returns the humanized digest text, or None if there were 0 fragments for the
-    range (so the caller can skip OpenAI spend on an empty period — synthesis is
-    never called in that case).
+    Returns {'text': str, 'found': int, 'used': int} where `found` is how many
+    fragments the period had and `used` is how many were fed to the model (all,
+    unless Pass-1 trimmed a large period). Returns None if there were 0 fragments
+    (so the caller skips OpenAI spend on an empty period — synthesis never runs).
 
     until is the UPPER bound EXCLUSIVE (see get_fragments_for_digest).
     """
@@ -127,16 +128,22 @@ def build_digest(
         return None  # no spend on an empty period
 
     result = synthesize_and_save(topic_arg, fragments, topic_type=topic_type)
-    return humanize_refs(result['content'], result['fragment_ids'])
+    text = humanize_refs(result['content'], result['fragment_ids'])
+    return {
+        'text': text,
+        'found': result.get('found', len(fragments)),
+        'used': len(result['fragment_ids']),
+    }
 
 
 def _run_digest(topic_arg: str, period: str, channel: str) -> int:
     since = parse_period(period)
-    text = build_digest(topic_arg, since=since)
-    if text is None:
+    result = build_digest(topic_arg, since=since)
+    if result is None:
         logger.info("digest topic=%s period=%s → 0 fragments, nothing to send",
                     topic_arg, period)
         return 0
+    text = result['text']
     channels.send(text, channel=channel)
     return 0
 
