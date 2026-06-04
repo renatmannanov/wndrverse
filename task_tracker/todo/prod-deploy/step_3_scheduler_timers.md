@@ -1,7 +1,8 @@
 # Шаг 3: Шедулер + embedder как systemd-таймеры
 
 > Зависит от: шаг 2 (бот пишет данные)
-> Статус: [ ] pending
+> Статус: [~] ЧАСТИЧНО (2026-06-03): embedder-таймер DONE; дайджест-таймер ОТЛОЖЕН
+>          по решению пользователя (делаем embedder сейчас, дайджест — позже)
 
 ## Задача
 
@@ -107,8 +108,18 @@ sudo systemctl is-enabled wndr-digest.timer wndr-embedder.timer   # enabled
 
 ## Критерии готовности
 
-- [ ] `wndr-digest.timer` + `wndr-embedder.timer` enabled + active, `Persistent=true`,
-      видны в `systemctl list-timers`.
-- [ ] Дайджест-сервис зовёт `digest.scheduler --now` (НЕ sleep-loop).
+- [x] `wndr-embedder.timer` enabled + active (waiting), `Persistent=true`, виден в
+      `systemctl list-timers` (next 19:00 UTC = 00:00 Almaty).
+- [ ] `wndr-digest.timer` — ОТЛОЖЕН (решение пользователя 2026-06-03: пока только
+      embedder). Юнит-конфиг в этом файле готов, enable — позже.
+- [ ] Дайджест-сервис зовёт `digest.scheduler --now` (НЕ sleep-loop) — при включении.
 - [ ] OnCalendar дайджеста зафиксирован как источник времени (progress.md).
-- [ ] Embedder-таймер настроен (дельта по embedding IS NULL).
+- [x] Embedder-таймер настроен (дельта по embedding IS NULL), каждые 6ч.
+
+## Факты выполнения (2026-06-03)
+- Разовый embedder руками: 15 unembedded → 14 embedded + 1 near-dup, unembedded=0,
+  total=10955. Стоимость ~$0.00001 (text-embedding-3-small, 628 токенов).
+- `systemd-analyze calendar` для embedder OnCalendar = валиден (Next elapse конкретный,
+  не never). Таймзона Asia/Almaty распознана на systemd v255.
+- ДАЙДЖЕСТ-таймер пока НЕ включён (по запросу). Включение = отдельный заход:
+  записать wndr-digest.service+timer, validate OnCalendar, enable.

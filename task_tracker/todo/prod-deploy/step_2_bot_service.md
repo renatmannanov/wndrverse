@@ -1,7 +1,7 @@
 # Шаг 2: Бот-ингестор как systemd-сервис
 
 > Зависит от: шаг 1 (БД + корпус на VPS)
-> Статус: [ ] pending
+> Статус: [x] DONE (2026-06-03)
 
 ## Задача
 
@@ -66,7 +66,16 @@ docker compose exec -T db psql -U postgres -d wndrverse -c \
 
 ## Критерии готовности
 
-- [ ] privacy mode OFF (подтверждено в @BotFather).
-- [ ] `wndr-ingest-bot.service` active + enabled (автостарт при ребуте).
-- [ ] Тестовое сообщение появилось в БД с ключом `tg_{chat_id}_{msg_id}`, без дубля.
-- [ ] Сервисы VPS (OpenClaw/Hermes) не затронуты.
+- [x] privacy mode OFF (подтверждено пользователем 2026-06-03).
+- [x] `wndr-ingest-bot.service` active (running) + enabled (автостарт при ребуте).
+- [x] Реальные сообщения в БД с ключом `tg_{chat_id}_{msg_id}`, dup=0 сохраняется.
+- [x] Сервисы VPS (OpenClaw/Hermes) не затронуты (отдельный юнит, своя сеть docker).
+
+## Факты выполнения (2026-06-03)
+- Смоук перед сервисом: бот ловил backlog questions_to_women, все `duplicates_skipped`
+  (дедуп поверх дампа РАБОТАЕТ — ключи backfill↔бот совпали).
+- После enable: total 10940→10955 (бот записал 15 НОВЫХ), dup=0. questions_to_women
+  339→354. Ключ новых: `tg_-1002924475859_NNNNN` (единый формат).
+- 15 новых = `embedding IS NULL` (бот не эмбеддит) → вход для step_3 embedder-таймера.
+- Бот = чистый слушатель: только on_message→ingest, НЕТ исходящих в Telegram
+  (проверено по коду). В группу ничего не пишет; дайджест шлёт только в ЛС.

@@ -1,7 +1,7 @@
 # Шаг 1: Docker + БД на VPS + перенос корпуса дампом
 
 > Зависит от: план data-corpus = done (влит в master; корпус 10940, dup=0, unemb=0)
-> Статус: [ ] pending
+> Статус: [x] DONE (2026-06-03)
 
 ## Задача
 
@@ -123,10 +123,17 @@ git check-ignore .env core/ingest/topic_map.json
 
 ## Критерии готовности
 
-- [ ] master запушен на origin (clone на VPS видит c095854 или новее).
-- [ ] Docker установлен; `docker ps` без sudo (rm_agent в группе docker).
-- [ ] Код на VPS в `~/wndrverse`, ветка master; `.venv` + `pip -r requirements.txt`.
-- [ ] `docker compose ps` — db healthy; init НЕ запускался.
-- [ ] Корпус восстановлен ПОЛНЫМ дампом: total=10940; dup=0; unemb=0.
-- [ ] `.env`, `topic_map.json` на VPS, gitignored.
-- [ ] PII-дамп `.sql` удалён с VPS и локально после restore.
+- [x] master запушен на origin (clone на VPS видит f8948a3).
+- [x] Docker установлен (29.1.3); `docker ps` без sudo (rm_agent в группе docker).
+- [x] Код на VPS в `~/wndrverse`, ветка master; `.venv` + `pip -r requirements.txt`.
+- [x] `docker compose ps` — db healthy; init НЕ запускался (restore несёт схему).
+- [x] Корпус восстановлен ПОЛНЫМ дампом: total=10940; dup=0; unemb=0 (== локалка).
+- [x] `.env` (chmod 600), `topic_map.json` на VPS, gitignored. resolve_topic смоук ОК.
+- [x] PII-дамп `.sql` удалён с VPS и локально после restore.
+
+## Факты выполнения (2026-06-03)
+- Docker 29.1.3 + Compose 2.40.3 поставлены (apt). Ядро обновилось до 6.8.0-117 —
+  reboot рекомендован, но НЕ обязателен сейчас (БД переживёт; отложено).
+- Дамп 210MB, md5 совпал VPS↔локалка, restore exit=0, 0 ошибок.
+- pg 16.14 обе стороны → `\restrict` директива совместима.
+- DATABASE_URL в .env НЕ задан — дефолт core/db.py совпадает с compose (localpass).

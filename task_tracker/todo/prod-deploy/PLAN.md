@@ -57,9 +57,9 @@
 
 | # | Файл | Статус |
 |---|------|--------|
-| 1 | step_1_vps_db_and_corpus.md  | [ ] |
-| 2 | step_2_bot_service.md        | [ ] |
-| 3 | step_3_scheduler_timers.md   | [ ] |
+| 1 | step_1_vps_db_and_corpus.md  | [x] DONE 2026-06-03 |
+| 2 | step_2_bot_service.md        | [x] DONE 2026-06-03 |
+| 3 | step_3_scheduler_timers.md   | [~] embedder DONE; digest отложен |
 | 4 | step_4_prod_smoke_handoff.md | [ ] |
 | 5 | step_5_completion.md         | [ ] |
 
