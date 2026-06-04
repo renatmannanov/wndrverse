@@ -207,6 +207,29 @@ def get_fragments_count() -> int:
         session.close()
 
 
+def get_topics_with_counts(min_chars: int = 150) -> list[tuple[str, int]]:
+    """Distinct topics that have digest-eligible fragments, with their counts.
+
+    Same eligibility as get_fragments_for_digest (not duplicate, text long
+    enough), so the list only shows topics /summary can actually digest.
+    Sorted by count desc. Used for the /summary help reply.
+    """
+    session = SessionLocal()
+    try:
+        rows = (
+            session.query(Fragment.topic, func.count(Fragment.id))
+            .filter(Fragment.is_duplicate.isnot(True))
+            .filter(func.char_length(Fragment.text) >= min_chars)
+            .filter(Fragment.topic.isnot(None))
+            .group_by(Fragment.topic)
+            .order_by(func.count(Fragment.id).desc())
+            .all()
+        )
+        return [(t, c) for t, c in rows]
+    finally:
+        session.close()
+
+
 def get_fragments_for_digest(
     topic: str | None,
     since: datetime | None,

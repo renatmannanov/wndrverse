@@ -68,7 +68,7 @@
 | # | Файл | Статус |
 |---|------|--------|
 | 1 | step_1_prompt_and_date_range.md | [x] |
-| 2 | step_2_summary_command.md       | [ ] |
+| 2 | step_2_summary_command.md       | [x] |
 | 3 | step_3_deploy_and_smoke.md      | [ ] |
 | 4 | step_4_completion.md            | [ ] |
 

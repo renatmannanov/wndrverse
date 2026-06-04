@@ -74,6 +74,16 @@ OFF) and a `core/ingest/topic_map.json` mapping `(chat_id, thread_id) → topic`
 Unknown chats are skipped + logged. Run on Windows with `PYTHONUTF8=1` if the
 console mangles Cyrillic.
 
+The same bot also serves `/summary <topic> <YYYY-MM-DD> <YYYY-MM-DD>` — an
+on-demand digest over an EXACT (inclusive) date range, DM'd to the caller. Access
+is whitelisted by `WNDR_SUMMARY_ALLOWED` (CSV of user_ids; empty => nobody,
+fail-closed). `/summary` with no args replies with the format + the list of
+topics that actually have fragments. Unknown topic / bad date / from>till → a
+friendly reply with no OpenAI spend; 0 fragments for the range → "нет сообщений"
+(also no spend). Reuses `delivery.cli.build_digest` (the shared synth+humanize
+core), so PII stays local ([#id] → [name, date] from the DB). The caller must
+`/start` the bot in DM first, else the result reply hints `/start`.
+
 ### Digest scheduler (digest/) — daily digest → user's DM
 
 ```bash
@@ -117,6 +127,7 @@ WNDR_DIGEST_TZ     — digest schedule timezone (default Asia/Almaty)
 WNDR_DIGEST_AT     — digest run time HH:MM (default 09:00)
 WNDR_DIGEST_PERIOD — message lookback window (default 1d)
 WNDR_DIGEST_TOPICS — comma-separated topics (default questions_to_women,questions_to_men)
+WNDR_SUMMARY_ALLOWED — CSV of Telegram user_ids allowed to run /summary (empty => nobody)
 ```
 
 ## Stack
