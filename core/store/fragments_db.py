@@ -207,15 +207,44 @@ def get_fragments_count() -> int:
         session.close()
 
 
+def get_topics_with_counts(min_chars: int = 150) -> list[tuple[str, int]]:
+    """Distinct topics that have digest-eligible fragments, with their counts.
+
+    Same eligibility as get_fragments_for_digest (not duplicate, text long
+    enough), so the list only shows topics /summary can actually digest.
+    Sorted by count desc. Used for the /summary help reply.
+    """
+    session = SessionLocal()
+    try:
+        rows = (
+            session.query(Fragment.topic, func.count(Fragment.id))
+            .filter(Fragment.is_duplicate.isnot(True))
+            .filter(func.char_length(Fragment.text) >= min_chars)
+            .filter(Fragment.topic.isnot(None))
+            .group_by(Fragment.topic)
+            .order_by(func.count(Fragment.id).desc())
+            .all()
+        )
+        return [(t, c) for t, c in rows]
+    finally:
+        session.close()
+
+
 def get_fragments_for_digest(
     topic: str | None,
     since: datetime | None,
+    until: datetime | None = None,
     min_chars: int = 150,
 ) -> list[dict]:
     """Fragments for digest synthesis.
 
     Filters: topic == topic (if given), created_at >= since (if given),
+    created_at < until (if given — UPPER bound EXCLUSIVE),
     char_length(text) >= min_chars, is_duplicate IS NOT TRUE. Sorted by created_at.
+
+    For an inclusive `from..till` day range the caller passes
+    until = date_till + 1 day (next midnight), so a fragment at 23:59 on
+    date_till is included. created_at is UTC.
 
     Returns [{id, text, created_at, author_name, sender_id, tags}, ...].
     NOTE: created_at is returned as an ISO STRING (.isoformat()), matching all the
@@ -236,6 +265,8 @@ def get_fragments_for_digest(
             query = query.filter(Fragment.topic == topic)
         if since is not None:
             query = query.filter(Fragment.created_at >= since)
+        if until is not None:
+            query = query.filter(Fragment.created_at < until)
         query = query.filter(func.char_length(Fragment.text) >= min_chars)
         query = query.order_by(Fragment.created_at)
 
