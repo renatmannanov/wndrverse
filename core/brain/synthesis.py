@@ -115,7 +115,7 @@ def _select_fragments(topic: str, topic_hint: str, fragments: list[dict]) -> set
         topic=topic, topic_hint=topic_hint, target=SELECTION_TARGET,
         fragments_list=fragments_list,
     )
-    raw = complete(prompt, temperature=0.3)
+    raw = complete(prompt, temperature=0.0)  # id selection — deterministic
     logger.debug("Selection raw: %s", raw)
 
     valid_ids = {f['id'] for f in fragments}
@@ -149,7 +149,9 @@ def _synthesize_fragments(topic: str, topic_hint: str, fragments: list[dict]) ->
     )
     # max_tokens is a CEILING (~4000 chars of Cyrillic ≈ 2200 tokens with headroom),
     # paired with the soft prompt instruction above. Shorter output is fine.
-    return complete(prompt, temperature=0.5, max_tokens=2200)
+    # temperature low (0.2) so repeat runs of the same period are near-identical
+    # — keeps language alive but stops two callers getting different digests.
+    return complete(prompt, temperature=0.2, max_tokens=2200)
 
 
 def _insufficient_data_message(topic: str, fragments: list[dict]) -> str:
