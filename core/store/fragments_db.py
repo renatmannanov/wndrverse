@@ -207,21 +207,30 @@ def get_fragments_count() -> int:
         session.close()
 
 
-def get_topics_with_counts(min_chars: int = 150) -> list[tuple[str, int]]:
+def get_topics_with_counts(
+    min_chars: int = 150,
+    only: set[str] | None = None,
+) -> list[tuple[str, int]]:
     """Distinct topics that have digest-eligible fragments, with their counts.
 
     Same eligibility as get_fragments_for_digest (not duplicate, text long
     enough), so the list only shows topics /summary can actually digest.
+    `only` (if given) restricts to that set of topic names — the caller passes
+    the known topics (TOPIC_HINTS) so stray/foreign mappings don't surface.
     Sorted by count desc. Used for the /summary help reply.
     """
     session = SessionLocal()
     try:
-        rows = (
+        query = (
             session.query(Fragment.topic, func.count(Fragment.id))
             .filter(Fragment.is_duplicate.isnot(True))
             .filter(func.char_length(Fragment.text) >= min_chars)
             .filter(Fragment.topic.isnot(None))
-            .group_by(Fragment.topic)
+        )
+        if only is not None:
+            query = query.filter(Fragment.topic.in_(only))
+        rows = (
+            query.group_by(Fragment.topic)
             .order_by(func.count(Fragment.id).desc())
             .all()
         )
