@@ -20,6 +20,7 @@ from core.ingest.topic_map import resolve_topic
 from core.brain.synthesis import TOPIC_HINTS, MAX_FRAGMENTS_WITHOUT_SELECTION
 from core.store.fragments_db import get_topics_with_counts
 from delivery.cli import build_digest, count_fragments, parse_date_range
+from delivery.markup import send_formatted_dm
 
 logger = logging.getLogger(__name__)
 
@@ -196,7 +197,7 @@ async def on_summary(update, context):
     #    Always DM the caller, never the group.
     digest = result['text'][:TG_MSG_LIMIT]
     try:
-        await context.bot.send_message(chat_id=user_id, text=digest)
+        await send_formatted_dm(context.bot, user_id, digest)
         logger.info("summary SENT user=%s topic=%s found=%d used=%d len=%d",
                     user_id, topic, found, result['used'], len(digest))
     except Forbidden:

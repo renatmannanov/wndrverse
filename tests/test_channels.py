@@ -21,8 +21,9 @@ class _FakeBot:
     def __init__(self, token):
         self.token = token
 
-    async def send_message(self, *, chat_id, text):
-        _FakeBot.calls.append({"token": self.token, "chat_id": chat_id, "text": text})
+    async def send_message(self, *, chat_id, text, parse_mode=None):
+        _FakeBot.calls.append({"token": self.token, "chat_id": chat_id,
+                               "text": text, "parse_mode": parse_mode})
 
 
 @pytest.fixture
@@ -31,7 +32,17 @@ def fake_telegram(monkeypatch):
     _FakeBot.calls = []
     fake_mod = types.ModuleType("telegram")
     fake_mod.Bot = _FakeBot
+    # send_formatted_dm imports ParseMode / BadRequest from telegram submodules;
+    # the fake module must expose them (and they must be importable as submodules).
+    constants_mod = types.ModuleType("telegram.constants")
+    constants_mod.ParseMode = types.SimpleNamespace(HTML="HTML")
+    error_mod = types.ModuleType("telegram.error")
+    error_mod.BadRequest = type("BadRequest", (Exception,), {})
+    fake_mod.constants = constants_mod
+    fake_mod.error = error_mod
     monkeypatch.setitem(sys.modules, "telegram", fake_mod)
+    monkeypatch.setitem(sys.modules, "telegram.constants", constants_mod)
+    monkeypatch.setitem(sys.modules, "telegram.error", error_mod)
     monkeypatch.setenv("BOT_TOKEN_INGEST", "TEST_TOKEN")
     monkeypatch.setenv("WNDR_DIGEST_DM_USER_ID", "423915315")
     return _FakeBot

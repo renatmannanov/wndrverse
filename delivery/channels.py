@@ -39,6 +39,8 @@ def _send_telegram_dm(text: str) -> None:
     """
     from telegram import Bot
 
+    from delivery.markup import send_formatted_dm
+
     token = os.environ["BOT_TOKEN_INGEST"]
     user_id = int(os.environ["WNDR_DIGEST_DM_USER_ID"])
     if len(text) > TELEGRAM_MAX:
@@ -47,6 +49,6 @@ def _send_telegram_dm(text: str) -> None:
 
     async def _go():
         bot = Bot(token)
-        await bot.send_message(chat_id=user_id, text=text)
+        await send_formatted_dm(bot, user_id, text)
 
     asyncio.run(_go())
