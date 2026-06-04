@@ -1,7 +1,8 @@
 # prod-deploy
 
-> Статус: pending (РАЗБЛОКИРОВАН — data-corpus = done, влит в master c095854)
-> Дата: 2026-06-01 (план), 2026-06-03 (ревью-фиксы применены, инфра сверена с VPS)
+> Статус: DONE (2026-06-04). Дайджест-таймер вынесен в
+>          `backlog/enable-daily-digest-timer.md` (отложен пользователем).
+> Дата: 2026-06-01 (план), 2026-06-03 (ревью-фиксы + деплой), 2026-06-04 (завершён)
 > Тип: инфраструктура (деплой на VPS)
 > Ветка: master (data-corpus влит ff; отдельную feature-ветку не заводим —
 >         деплой инфраструктурный, кода почти не трогает)
@@ -59,22 +60,21 @@
 |---|------|--------|
 | 1 | step_1_vps_db_and_corpus.md  | [x] DONE 2026-06-03 |
 | 2 | step_2_bot_service.md        | [x] DONE 2026-06-03 |
-| 3 | step_3_scheduler_timers.md   | [~] embedder DONE; digest отложен |
-| 4 | step_4_prod_smoke_handoff.md | [ ] |
-| 5 | step_5_completion.md         | [ ] |
+| 3 | step_3_scheduler_timers.md   | [x] embedder DONE; digest→backlog |
+| 4 | step_4_prod_smoke_handoff.md | [x] DONE (smoke через /summary) |
+| 5 | step_5_completion.md         | [x] DONE 2026-06-04 |
 
 ## Критерии готовности
 
-- [ ] postgres+pgvector на VPS; корпус восстановлен из дампа (count совпадает с
-      локальной БД; `dup_keys`=0, `unembedded`=0).
-- [ ] Бот-ингестор = systemd-сервис (`systemctl status` active), ловит новые WNDR
-      сообщения (count растёт).
-- [ ] Дайджест-шедулер = systemd-timer (`Persistent=true`); embedder-timer тоже.
-      `systemctl list-timers` показывает оба.
-- [ ] Прод-smoke: реальный WNDR-дайджест по `questions_to_*` доставлен в ЛС;
-      PII локальная; длина в норме.
-- [ ] CLAUDE.md: каталог core на VPS, systemd-юниты, deploy-команды.
-- [ ] Существующие сервисы VPS (OpenClaw/Hermes) не затронуты.
+- [x] postgres+pgvector на VPS; корпус восстановлен из дампа (total=10940 на момент
+      restore, dup=0, unemb=0; сейчас растёт от бота — 10956, dup=0, unemb=0).
+- [x] Бот-ингестор = systemd-сервис (active), ловит новые WNDR сообщения (count растёт).
+- [x] embedder-timer = systemd-timer (`Persistent=true`), виден в list-timers,
+      реально срабатывает (последний прогон подтверждён). Дайджест-timer → backlog.
+- [x] Прод-smoke: реальный синтез дайджеста по questions_to_women доставлен в ЛС
+      через `/summary` (artifacts id 12-15); PII локальная; длина в норме.
+- [x] CLAUDE.md: каталог `~/wndrverse`, systemd-юниты, deploy-команды (секция Production).
+- [x] Существующие сервисы VPS (OpenClaw/Hermes) не затронуты (наши юниты = `wndr-*`).
 
 ## Что НЕ в этой задаче (защита от scope creep)
 

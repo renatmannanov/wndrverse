@@ -1,8 +1,9 @@
 # Шаг 3: Шедулер + embedder как systemd-таймеры
 
 > Зависит от: шаг 2 (бот пишет данные)
-> Статус: [~] ЧАСТИЧНО (2026-06-03): embedder-таймер DONE; дайджест-таймер ОТЛОЖЕН
->          по решению пользователя (делаем embedder сейчас, дайджест — позже)
+> Статус: [x] DONE для прод-деплоя (2026-06-04): embedder-таймер запущен. Дайджест-
+>          таймер ВЫНЕСЕН В БЭКЛОГ (`backlog/enable-daily-digest-timer.md`) по решению
+>          пользователя — авто-дайджест включим отдельно, когда понадобится.
 
 ## Задача
 
@@ -110,10 +111,9 @@ sudo systemctl is-enabled wndr-digest.timer wndr-embedder.timer   # enabled
 
 - [x] `wndr-embedder.timer` enabled + active (waiting), `Persistent=true`, виден в
       `systemctl list-timers` (next 19:00 UTC = 00:00 Almaty).
-- [ ] `wndr-digest.timer` — ОТЛОЖЕН (решение пользователя 2026-06-03: пока только
-      embedder). Юнит-конфиг в этом файле готов, enable — позже.
-- [ ] Дайджест-сервис зовёт `digest.scheduler --now` (НЕ sleep-loop) — при включении.
-- [ ] OnCalendar дайджеста зафиксирован как источник времени (progress.md).
+- [→] `wndr-digest.timer` — ВЫНЕСЕН В БЭКЛОГ `backlog/enable-daily-digest-timer.md`
+      (решение пользователя). Юнит-конфиг готов в этом файле, enable — отдельной задачей.
+- [→] Дайджест-сервис / OnCalendar / источник времени — см. backlog-задачу (там же).
 - [x] Embedder-таймер настроен (дельта по embedding IS NULL), каждые 6ч.
 
 ## Факты выполнения (2026-06-03)

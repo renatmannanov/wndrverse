@@ -14,8 +14,8 @@ Three related repos — easy to confuse:
 
 | Repo | What it is | Where |
 |------|-----------|-------|
-| `renatmannanov/wndrverse` | this repo (was `re_verse`, renamed 2026-05) — main: plans, curator, docs | local `~/projects/wndrverse` |
-| `renatmannanov/wndrverse_agent_claude` | Claude agent, extracted to standalone (commit 7f61088) — **this is what's deployed** | VPS `~/wndrverse_agent_claude` (migrating to `~/claude-hub/projects/wndrverse`) |
+| `renatmannanov/wndrverse` | this repo (was `re_verse`, renamed 2026-05) — main: plans, curator, docs, **core/bot/digest pipeline** | local `~/projects/wndrverse`; **deployed VPS `~/wndrverse`** (ingest bot + embedder timer + DB, see Production section) |
+| `renatmannanov/wndrverse_agent_claude` | Claude agent, extracted to standalone (commit 7f61088) — the curator/agent piece | VPS `~/wndrverse_agent_claude` (migrating to `~/claude-hub/projects/wndrverse`) |
 | `renatmannanov/claude_hub` | shared hub scaffold for all Claude SDK agents | VPS `~/claude-hub` |
 
 **VPS:** `rm_agent@62.238.31.95` (Hetzner CX33, hostname `openclaw-prod`, Ubuntu 24.04). Same server as OpenClaw/Hermes but fully isolated.
@@ -110,6 +110,40 @@ it to `WNDR_DIGEST_DM_USER_ID` via the ingest bot, reusing `delivery.cli._run_di
 skipped (no OpenAI spend). User must `/start` the ingest bot first (Telegram won't
 let a bot message first). Schedule pinned to a named zone so a UTC VPS move won't
 shift the send moment. No missed-run recovery in MVP.
+
+### Production (systemd on VPS)
+
+Deployed 2026-06-04 to the VPS (`rm_agent@62.238.31.95`, see deploy map). The
+core/bot/digest pipeline lives in **`~/wndrverse`** (its own dir in home — NOT
+inside `~/claude-hub`, which is a separate git scaffold for Claude SDK agents).
+Docker (postgres+pgvector on :5434) + a Python venv (`~/wndrverse/.venv`).
+
+The corpus was moved by a **full `pg_dump`** of the local DB (DDL + `CREATE
+EXTENSION vector` + data) restored into a fresh empty DB — NO `core.db init`
+before restore (the full dump carries the schema; running init first would cause
+`relation already exists`). The `.sql` dump (holds PII) is deleted after restore,
+local and on the VPS. `.env` (chmod 600) and `topic_map.json` are gitignored,
+created by hand on the VPS.
+
+systemd units (all `~/wndrverse`-pathed, `User=rm_agent`):
+- `wndr-ingest-bot.service` — long-lived realtime listener (`-m bot.ingest_bot`).
+- `wndr-embedder.timer` → `.service` — `-m core.enrich.embedder` every 6h, batch
+  over `embedding IS NULL` (cheap delta; corpus from dump already embedded).
+- `wndr-digest.timer` — daily DM digest. **NOT enabled yet** — see
+  `task_tracker/backlog/enable-daily-digest-timer.md` (deferred by user).
+
+Ops commands:
+```bash
+ssh -i ~/.ssh/openclaw_hetzner rm_agent@62.238.31.95
+cd ~/wndrverse
+sudo systemctl status wndr-ingest-bot            # active (running)
+systemctl list-timers | grep wndr                # embedder next-run
+journalctl -u wndr-ingest-bot -f                 # live ingest log
+docker compose exec -T db psql -U postgres -d wndrverse -c \
+  "SELECT count(*), count(*)-count(DISTINCT external_id) dup FROM fragments;"
+```
+Deploy update: `git pull origin master` in `~/wndrverse`, then
+`sudo systemctl restart wndr-ingest-bot`. Do NOT touch OpenClaw/Hermes units.
 
 ## Key files
 
