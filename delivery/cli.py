@@ -3,10 +3,10 @@ Delivery CLI — the MVP entry point.
 
     python -m delivery digest --topic offerings --period 1w [--channel stdout]
 
-Flow: get_fragments_for_digest → synthesize → humanize [#id] refs locally → send.
+Flow: get_fragments_for_digest → synthesize → humanize [@N] refs locally → send.
 
 PII: names are substituted here, locally from the DB. They are NOT sent to OpenAI
-(synthesis only ever sees [#id] + text).
+(synthesis only ever sees [@N] anonymous author keys + text).
 """
 
 import os
@@ -22,7 +22,12 @@ from delivery import channels
 logger = logging.getLogger(__name__)
 
 # [#207] / [207] / #207 / (#207) — tolerant of how the LLM wraps the id.
+# Legacy [#id] contract; kept for back-compat. NOT used on [@N] digests.
 _REF_RE = re.compile(r"\[?#?(\d+)\]?")
+
+# [@N] — anonymous per-author key (the current synthesis contract). Matches ONLY
+# [@N], so it never collides with _REF_RE's bare-digit matching.
+_AUTHOR_REF_RE = re.compile(r"\[@(\d+)\]")
 
 
 def parse_period(period: str) -> datetime | None:
@@ -100,6 +105,21 @@ def humanize_refs(content: str, fragment_ids: list[int]) -> str:
     return _REF_RE.sub(repl, content)
 
 
+def humanize_author_refs(content: str, author_refs: dict) -> str:
+    """Replace [@N] author refs with [name], using author_refs {N: name}.
+
+    Names come from our DB (passed through synthesize's author_refs), never from
+    the LLM. No date — an author spans several messages. Unknown N is left as-is
+    (the digest stays readable). Keys may be int or str (JSON round-trip safety).
+    """
+    def repl(m: re.Match) -> str:
+        n = int(m.group(1))
+        name = author_refs.get(n) or author_refs.get(str(n))
+        return f"[{name}]" if name else m.group(0)
+
+    return _AUTHOR_REF_RE.sub(repl, content)
+
+
 def count_fragments(
     topic_arg: str,
     since: datetime | None = None,
@@ -118,7 +138,7 @@ def build_digest(
     since: datetime | None = None,
     until: datetime | None = None,
 ) -> dict | None:
-    """Core: select → synthesize → humanize [#id] refs locally → return result.
+    """Core: select → synthesize → humanize [@N] refs locally → return result.
 
     The single shared synthesis path used by BOTH the scheduler (fixed period)
     and the bot's /summary command (exact date range). No sending — the caller
@@ -141,7 +161,9 @@ def build_digest(
         return None  # no spend on an empty period
 
     result = synthesize_and_save(topic_arg, fragments, topic_type=topic_type)
-    text = humanize_refs(result['content'], result['fragment_ids'])
+    # [@N] -> [name] locally from synthesize's author_refs (PII stays local).
+    # Do NOT also run humanize_refs here: its bare-digit _REF_RE would mangle [@N].
+    text = humanize_author_refs(result['content'], result.get('author_refs', {}))
     return {
         'text': text,
         'found': result.get('found', len(fragments)),
