@@ -11,6 +11,7 @@ DB-free, OpenAI-free. Covers the digest-group-by-author feature:
 """
 
 import re
+from datetime import datetime
 
 import pytest
 
@@ -130,10 +131,34 @@ def test_build_digest_substitutes_author_refs_not_ids(monkeypatch):
     monkeypatch.setattr(cli, "humanize_refs",
                         lambda *a, **k: pytest.fail("humanize_refs must not be called"))
 
-    result = cli.build_digest("commits")
+    since = datetime(2026, 5, 16)
+    until = datetime(2026, 6, 1)  # exclusive -> last day 05-31
+    result = cli.build_digest("commits", since, until)
     assert result is not None
     assert "[Аня]" in result["text"] and "[Боря]" in result["text"]
     assert "[@1]" not in result["text"] and "[@2]" not in result["text"]
+    # deterministic header: topic + exact dates (from the request, not the LLM)
+    assert "commits" in result["text"]
+    assert "2026-05-16" in result["text"] and "2026-05-31" in result["text"]
+    assert result["text"].index("commits") < result["text"].index("[Аня]")  # header first
+
+
+# --- _digest_header ---------------------------------------------------------
+
+def test_header_exact_range():
+    # until is EXCLUSIVE -> last shown day is until - 1
+    h = cli._digest_header("commits", datetime(2026, 5, 16), datetime(2026, 6, 1))
+    assert h == "📅 commits · 2026-05-16 — 2026-05-31"
+
+
+def test_header_open_upper_bound():
+    h = cli._digest_header("offerings", datetime(2026, 5, 1), None)
+    assert "2026-05-01" in h and "сейчас" in h
+
+
+def test_header_open_lower_bound():
+    h = cli._digest_header("all", None, datetime(2026, 6, 1))
+    assert "…" in h and "2026-05-31" in h
 
 
 # --- synthesize_and_save passes author_refs through -------------------------

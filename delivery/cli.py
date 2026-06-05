@@ -120,6 +120,22 @@ def humanize_author_refs(content: str, author_refs: dict) -> str:
     return _AUTHOR_REF_RE.sub(repl, content)
 
 
+def _digest_header(topic_arg: str, since: datetime | None, until: datetime | None) -> str:
+    """A deterministic '📅 topic · from — till' header line for the digest text.
+
+    Dates come from the request (not the LLM), so they are always exact. `until`
+    is the EXCLUSIVE upper bound, so the last included day is until - 1 day. A
+    None bound is shown openly ('…' / 'сейчас'). Lives inside result['text'] so it
+    survives a verbatim forward to a topic.
+    """
+    start = since.date().isoformat() if since else "…"
+    if until:
+        end = (until - timedelta(days=1)).date().isoformat()
+    else:
+        end = "сейчас"
+    return f"📅 {topic_arg} · {start} — {end}"
+
+
 def count_fragments(
     topic_arg: str,
     since: datetime | None = None,
@@ -163,7 +179,10 @@ def build_digest(
     result = synthesize_and_save(topic_arg, fragments, topic_type=topic_type)
     # [@N] -> [name] locally from synthesize's author_refs (PII stays local).
     # Do NOT also run humanize_refs here: its bare-digit _REF_RE would mangle [@N].
-    text = humanize_author_refs(result['content'], result.get('author_refs', {}))
+    body = humanize_author_refs(result['content'], result.get('author_refs', {}))
+    # Prepend a deterministic topic+dates header so the digest is self-describing
+    # (the dates come from the request, never the model) and stays so when forwarded.
+    text = f"{_digest_header(topic_arg, since, until)}\n\n{body}"
     return {
         'text': text,
         'found': result.get('found', len(fragments)),
