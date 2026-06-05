@@ -169,18 +169,24 @@ def test_build_digest_substitutes_author_refs_not_ids(monkeypatch):
     # display strings substituted WITHOUT brackets (so @handles auto-link)
     assert "Аня" in result["text"] and "Боря" in result["text"]
     assert "[@1]" not in result["text"] and "[@2]" not in result["text"]
-    # deterministic header: topic + exact dates (from the request, not the LLM)
-    assert "commits" in result["text"]
+    # deterministic header: pretty topic name + exact dates (from the request, not the LLM)
+    assert "Коммиты" in result["text"]
     assert "2026-05-16" in result["text"] and "2026-05-31" in result["text"]
-    assert result["text"].index("commits") < result["text"].index("Аня")  # header first
+    assert result["text"].index("Коммиты") < result["text"].index("Аня")  # header first
 
 
 # --- _digest_header ---------------------------------------------------------
 
-def test_header_exact_range():
-    # until is EXCLUSIVE -> last shown day is until - 1
+def test_header_exact_range_uses_display_name():
+    # until is EXCLUSIVE -> last shown day is until - 1; topic shown by pretty name
     h = cli._digest_header("commits", datetime(2026, 5, 16), datetime(2026, 6, 1))
-    assert h == "📅 commits · 2026-05-16 — 2026-05-31"
+    assert h == "📅 Коммиты · 2026-05-16 — 2026-05-31"
+
+
+def test_header_unmapped_topic_falls_back_to_key():
+    # 'sales' has no pretty name -> raw key; 'all' likewise
+    assert "sales" in cli._digest_header("sales", datetime(2026, 5, 1), datetime(2026, 6, 1))
+    assert "all" in cli._digest_header("all", datetime(2026, 5, 1), datetime(2026, 6, 1))
 
 
 def test_header_open_upper_bound():

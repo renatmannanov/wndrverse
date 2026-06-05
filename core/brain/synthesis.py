@@ -50,6 +50,24 @@ TOPIC_HINTS = {
                           "ответов/обсуждений.",
 }
 
+# Human-facing topic names (the original Telegram forum-topic titles) for the
+# digest header. Keys not listed here fall back to the raw key (see
+# delivery.cli._digest_header). NOT PII — just display labels, safe in git.
+TOPIC_DISPLAY_NAMES = {
+    'boltalka': "Болталка",
+    'offerings': "Community offerings",
+    'daily': "Daily следы",
+    'requests': "Запросы",
+    'intro': "Кто мы?",
+    'questions_to_women': "Вопросы к Женскому миру",
+    'questions_to_men': "Вопросы к Мужскому миру",
+    'commits': "Коммиты",
+    'harvest': "Харвест",
+    'announcements': "Анонсы | Организационное",
+    'quotes': "Цитатник",
+    # sales / together: no pretty name -> header shows the raw key
+}
+
 
 def _load_prompt(name: str) -> str:
     with open(os.path.join(_PROMPTS_DIR, name), encoding="utf-8") as fh:

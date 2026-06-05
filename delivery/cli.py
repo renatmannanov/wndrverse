@@ -16,7 +16,7 @@ import logging
 from datetime import datetime, timedelta
 
 from core.store.fragments_db import get_fragments_for_digest, get_fragments_by_ids
-from core.brain.synthesis import synthesize_and_save, TOPIC_HINTS
+from core.brain.synthesis import synthesize_and_save, TOPIC_HINTS, TOPIC_DISPLAY_NAMES
 from delivery import channels
 
 logger = logging.getLogger(__name__)
@@ -125,17 +125,20 @@ def humanize_author_refs(content: str, author_refs: dict) -> str:
 def _digest_header(topic_arg: str, since: datetime | None, until: datetime | None) -> str:
     """A deterministic '📅 topic · from — till' header line for the digest text.
 
-    Dates come from the request (not the LLM), so they are always exact. `until`
-    is the EXCLUSIVE upper bound, so the last included day is until - 1 day. A
-    None bound is shown openly ('…' / 'сейчас'). Lives inside result['text'] so it
-    survives a verbatim forward to a topic.
+    The topic is shown by its human-facing name (original Telegram forum-topic
+    title from TOPIC_DISPLAY_NAMES) when known, else the raw key as-is ('all' and
+    unmapped topics). Dates come from the request (not the LLM), so they are always
+    exact. `until` is the EXCLUSIVE upper bound, so the last included day is
+    until - 1 day. A None bound is shown openly ('…' / 'сейчас'). Lives inside
+    result['text'] so it survives a verbatim forward to a topic.
     """
+    name = TOPIC_DISPLAY_NAMES.get(topic_arg, topic_arg)
     start = since.date().isoformat() if since else "…"
     if until:
         end = (until - timedelta(days=1)).date().isoformat()
     else:
         end = "сейчас"
-    return f"📅 {topic_arg} · {start} — {end}"
+    return f"📅 {name} · {start} — {end}"
 
 
 def count_fragments(
