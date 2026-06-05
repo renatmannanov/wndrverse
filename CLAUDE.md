@@ -50,7 +50,8 @@ python -m delivery digest --topic offerings --period all   # digest → stdout (
 ```
 
 Needs `.env` (DATABASE_URL, OPENAI_API_KEY, WNDR_EXPORTS_DIR — see `.env.example`).
-PII: only text + `[#id]` go to OpenAI; names substituted locally on output.
+PII: only text + anonymous `[@N]` author keys go to OpenAI; names/@handles are
+substituted locally on output (see Digest author grouping below).
 `data/` is gitignored — community messages are never committed.
 
 **Dedup key:** `external_id = tg_{chat_id}_{msg_id}` — unified across the file
@@ -81,8 +82,9 @@ fail-closed). `/summary` with no args replies with the format + the list of
 topics that actually have fragments. Unknown topic / bad date / from>till → a
 friendly reply with no OpenAI spend; 0 fragments for the range → "нет сообщений"
 (also no spend). Reuses `delivery.cli.build_digest` (the shared synth+humanize
-core), so PII stays local ([#id] → [name, date] from the DB). The caller must
-`/start` the bot in DM first, else the result reply hints `/start`.
+core), so PII stays local (`[@N]` → `Name @handle` from the DB; see Digest author
+grouping below). The caller must `/start` the bot in DM first, else the result
+reply hints `/start`.
 
 Two messages: (1) an immediate ack ("Топик … | Период … | Найдено N, передаю в
 модель максимум 150. Собираю саммари…") via a cheap `count_fragments` DB query
@@ -96,6 +98,22 @@ Pass-1 LLM selection trims to ~20 (now over FULL text, not 100-char previews).
 The 150 threshold + full-text selection came from a 2026-06-04 A/B/C test:
 synthesizing all messages of a monthly range beat selection (more themes, cheaper).
 
+**Digest author grouping + `[@N]` contract** (2026-06-05): the digest references
+PEOPLE, not messages. Before Pass-2, `_group_by_author` (synthesis.py) groups the
+fragments by author (key: `sender_id` → `author_name` → anon) into one `[@N]` block
+per author — so a multi-message author becomes a single line in «КТО ЧТО», not one
+line per message. Only `[@N]` + texts go to OpenAI (no names). `synthesize` returns
+`author_refs {N: "Name @handle"}`; `delivery.cli.humanize_author_refs` substitutes
+`[@N]` → that display string locally, WITHOUT brackets so the `@handle` (Telegram
+username from `metadata->>'username'`, already captured at ingest) auto-links to the
+profile. `build_digest` also prepends a deterministic `📅 topic · from — till`
+header (dates from the request, not the LLM) into `result['text']` so it survives a
+verbatim forward. Synthesis temperature is 0.4 (livelier; names pinned by `[@N]`,
+can't desync); Pass-1 selection stays 0.0. Prompt `core/prompts/digest_synthesis.md`
+caps «КТО ЧТО» at ~15 participants and targets ~2800 chars to stay under Telegram's
+4096 cap after name substitution. The old `[#id]`-per-message contract is gone from
+the synthesis path (legacy `humanize_refs` is unused by the digest).
+
 ### Digest scheduler (digest/) — daily digest → user's DM
 
 ```bash
@@ -106,7 +124,7 @@ python -m digest.scheduler --now                     # run once immediately and 
 Long-lived stdlib sleep-loop (no APScheduler/cron). Once a day at `WNDR_DIGEST_AT`
 in zone `WNDR_DIGEST_TZ` it synthesizes a digest per `WNDR_DIGEST_TOPICS` and DMs
 it to `WNDR_DIGEST_DM_USER_ID` via the ingest bot, reusing `delivery.cli._run_digest`
-(synth → humanize [#id] locally → send). Topic with 0 fragments for the period is
+(synth → humanize `[@N]` author refs locally → send). Topic with 0 fragments for the period is
 skipped (no OpenAI spend). User must `/start` the ingest bot first (Telegram won't
 let a bot message first). Schedule pinned to a named zone so a UTC VPS move won't
 shift the send moment. No missed-run recovery in MVP.
