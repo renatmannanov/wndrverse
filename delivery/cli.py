@@ -106,16 +106,18 @@ def humanize_refs(content: str, fragment_ids: list[int]) -> str:
 
 
 def humanize_author_refs(content: str, author_refs: dict) -> str:
-    """Replace [@N] author refs with [name], using author_refs {N: name}.
+    """Replace [@N] author refs with the author's display string ('Name @handle').
 
-    Names come from our DB (passed through synthesize's author_refs), never from
-    the LLM. No date — an author spans several messages. Unknown N is left as-is
-    (the digest stays readable). Keys may be int or str (JSON round-trip safety).
+    The display string comes from our DB (via synthesize's author_refs), never from
+    the LLM. It is substituted WITHOUT surrounding brackets so a trailing @handle
+    stays a bare Telegram mention and auto-links to the profile. No date — an author
+    spans several messages. Unknown N is left as-is (digest stays readable). Keys may
+    be int or str (JSON round-trip safety).
     """
     def repl(m: re.Match) -> str:
         n = int(m.group(1))
         name = author_refs.get(n) or author_refs.get(str(n))
-        return f"[{name}]" if name else m.group(0)
+        return name if name else m.group(0)
 
     return _AUTHOR_REF_RE.sub(repl, content)
 

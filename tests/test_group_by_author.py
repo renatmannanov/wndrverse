@@ -21,9 +21,9 @@ from delivery import cli
 
 # --- _group_by_author -------------------------------------------------------
 
-def _frag(id, text, created_at, sender_id=None, author_name=None):
+def _frag(id, text, created_at, sender_id=None, author_name=None, username=None):
     return {"id": id, "text": text, "created_at": created_at,
-            "sender_id": sender_id, "author_name": author_name}
+            "sender_id": sender_id, "author_name": author_name, "username": username}
 
 
 def test_one_author_three_messages_one_block():
@@ -87,30 +87,61 @@ def test_single_message_head_has_no_count():
     assert text.startswith("[@1]:")
 
 
+# --- _display_name (Name @handle) -------------------------------------------
+
+def test_display_name_with_handle():
+    f = _frag(1, "t", "2026-05-16T10:00", sender_id=1, author_name="Нелли", username="Nelli_Logar")
+    assert synthesis._display_name(f) == "Нелли @Nelli_Logar"
+
+
+def test_display_name_no_handle_falls_back_to_name():
+    f = _frag(1, "t", "2026-05-16T10:00", sender_id=1, author_name="Аня", username=None)
+    assert synthesis._display_name(f) == "Аня"
+
+
+def test_display_name_anonymous():
+    f = _frag(1, "t", "2026-05-16T10:00", sender_id=None, author_name=None, username=None)
+    assert synthesis._display_name(f) == "аноним"
+
+
+def test_group_by_author_handle_in_refs():
+    frags = [
+        _frag(1, "a", "2026-05-16T10:00", sender_id=1, author_name="Нелли", username="Nelli_Logar"),
+        _frag(2, "b", "2026-05-17T10:00", sender_id=2, author_name="Аня", username=None),
+    ]
+    text, refs = synthesis._group_by_author(frags)
+    assert refs == {1: "Нелли @Nelli_Logar", 2: "Аня"}
+    # PII: neither name nor handle reaches the LLM input
+    assert "Нелли" not in text and "Nelli_Logar" not in text and "Аня" not in text
+
+
 # --- humanize_author_refs ---------------------------------------------------
 
-def test_humanize_basic_substitution():
-    out = cli.humanize_author_refs("[@1] — предлагает; [@2] — просит", {1: "Аня", 2: "Боря"})
-    assert out == "[Аня] — предлагает; [Боря] — просит"
+def test_humanize_basic_substitution_no_brackets():
+    # display string is substituted WITHOUT brackets, so a trailing @handle auto-links
+    out = cli.humanize_author_refs(
+        "[@1] — предлагает; [@2] — просит",
+        {1: "Нелли @Nelli_Logar", 2: "Аня"})
+    assert out == "Нелли @Nelli_Logar — предлагает; Аня — просит"
+    assert "[@1]" not in out and "[@2]" not in out
 
 
-def test_humanize_no_date_appended():
-    out = cli.humanize_author_refs("[@1] про баланс", {1: "Катя"})
-    # substituted block is bare [name], no ", date"
-    assert "[Катя]" in out
-    assert "," not in out
+def test_humanize_handle_is_bare_for_autolink():
+    out = cli.humanize_author_refs("[@1] про баланс", {1: "Катя @katya_k"})
+    assert "@katya_k" in out
+    assert "[@katya_k]" not in out       # no brackets around the mention
 
 
 def test_humanize_unknown_ref_left_as_is():
     out = cli.humanize_author_refs("[@1] и [@9]", {1: "Аня"})
-    assert "[Аня]" in out
+    assert "Аня" in out
     assert "[@9]" in out                 # unknown N untouched, doesn't crash
 
 
 def test_humanize_string_keys_tolerated():
     # JSON round-trip could turn int keys into strings
     out = cli.humanize_author_refs("[@1]", {"1": "Аня"})
-    assert out == "[Аня]"
+    assert out == "Аня"
 
 
 # --- build_digest wiring (the obligatory regression test) -------------------
@@ -135,12 +166,13 @@ def test_build_digest_substitutes_author_refs_not_ids(monkeypatch):
     until = datetime(2026, 6, 1)  # exclusive -> last day 05-31
     result = cli.build_digest("commits", since, until)
     assert result is not None
-    assert "[Аня]" in result["text"] and "[Боря]" in result["text"]
+    # display strings substituted WITHOUT brackets (so @handles auto-link)
+    assert "Аня" in result["text"] and "Боря" in result["text"]
     assert "[@1]" not in result["text"] and "[@2]" not in result["text"]
     # deterministic header: topic + exact dates (from the request, not the LLM)
     assert "commits" in result["text"]
     assert "2026-05-16" in result["text"] and "2026-05-31" in result["text"]
-    assert result["text"].index("commits") < result["text"].index("[Аня]")  # header first
+    assert result["text"].index("commits") < result["text"].index("Аня")  # header first
 
 
 # --- _digest_header ---------------------------------------------------------
@@ -178,13 +210,14 @@ def test_synthesize_and_save_keeps_author_refs(monkeypatch):
 
 def test_insufficient_message_self_contained():
     frags = [
-        _frag(1, "короткое сообщение", "2026-05-16T10:00", sender_id=5, author_name="Аня"),
+        _frag(1, "короткое сообщение", "2026-05-16T10:00", sender_id=5,
+              author_name="Аня", username="anya_k"),
         _frag(2, "ещё одно", "2026-05-17T10:00", sender_id=None, author_name=None),
     ]
     msg = synthesis._insufficient_data_message("commits", frags)
     # no leftover ref syntax — this branch never goes through substitution
     assert "[#" not in msg
     assert "[@" not in msg
-    # real names / 'аноним' shown directly
-    assert "[Аня]" in msg
-    assert "[аноним]" in msg
+    # display name (Name @handle) shown directly, plus 'аноним' fallback
+    assert "Аня @anya_k" in msg
+    assert "аноним" in msg

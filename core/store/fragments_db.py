@@ -255,7 +255,9 @@ def get_fragments_for_digest(
     until = date_till + 1 day (next midnight), so a fragment at 23:59 on
     date_till is included. created_at is UTC.
 
-    Returns [{id, text, created_at, author_name, sender_id, tags}, ...].
+    Returns [{id, text, created_at, author_name, username, sender_id, tags}, ...].
+    `username` comes from metadata->>'username' (the Telegram @handle, captured at
+    ingest; may be None). It stays local like author_name — never sent to OpenAI.
     NOTE: created_at is returned as an ISO STRING (.isoformat()), matching all the
     other query functions in this file — synthesis does f['created_at'][:10].
     """
@@ -266,6 +268,7 @@ def get_fragments_for_digest(
             Fragment.text,
             Fragment.created_at,
             Fragment.author_name,
+            Fragment.metadata_['username'].astext.label('username'),
             Fragment.sender_id,
             Fragment.tags,
         ).filter(Fragment.is_duplicate.isnot(True))
@@ -286,6 +289,7 @@ def get_fragments_for_digest(
                 'text': r.text,
                 'created_at': r.created_at.isoformat() if r.created_at else None,
                 'author_name': r.author_name,
+                'username': r.username,
                 'sender_id': r.sender_id,
                 'tags': r.tags or [],
             }

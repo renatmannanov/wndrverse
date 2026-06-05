@@ -124,14 +124,28 @@ def _author_key(f: dict):
     return ('anon', f['id'])
 
 
+def _display_name(f: dict) -> str:
+    """Local display string for an author: 'Name @handle' / 'Name' / 'аноним'.
+
+    The @handle (Telegram username, from the DB) is appended bare (no brackets)
+    so Telegram auto-links it to the profile. Falls back to the name alone when
+    there is no handle, and to 'аноним' when there is no real author at all. This
+    is PII — built locally on output, never sent to OpenAI.
+    """
+    has_real_author = f.get('sender_id') is not None or f.get('author_name')
+    name = (f.get('author_name') if has_real_author else None) or 'аноним'
+    handle = (f.get('username') or '').strip()
+    return f"{name} @{handle}" if handle else name
+
+
 def _group_by_author(fragments: list[dict]) -> tuple[str, dict[int, str]]:
     """Group fragments by author, preserving first-seen (date) order.
 
     Returns (grouped_text, author_refs):
       grouped_text feeds the LLM — each author is one [@N] block with all their
         texts joined by '---'. NO names: PII never leaves this process.
-      author_refs maps N -> display name (from the DB), for local substitution
-        of [@N] -> [name] after synthesis.
+      author_refs maps N -> display string ('Name @handle' from the DB), for local
+        substitution of [@N] -> display after synthesis.
     """
     order: list = []        # author keys, first-seen order
     by_key: dict = {}       # key -> {'name': str, 'texts': [str]}
@@ -139,9 +153,8 @@ def _group_by_author(fragments: list[dict]) -> tuple[str, dict[int, str]]:
         k = _author_key(f)
         if k not in by_key:
             order.append(k)
-            has_real_author = f.get('sender_id') is not None or f.get('author_name')
-            name = f.get('author_name') if has_real_author else 'аноним'
-            by_key[k] = {'name': name or 'аноним', 'texts': []}
+            # display name taken from the author's FIRST message (handle included)
+            by_key[k] = {'name': _display_name(f), 'texts': []}
         by_key[k]['texts'].append(f['text'])
 
     blocks: list[str] = []
@@ -210,14 +223,12 @@ def _synthesize_fragments(topic: str, topic_hint: str, grouped_text: str) -> str
 
 
 def _insufficient_data_message(topic: str, fragments: list[dict]) -> str:
-    """<3 fragments: a plain listing. Uses real names directly (this branch is
-    self-contained — it never goes through the [@N] -> [name] substitution)."""
+    """<3 fragments: a plain listing. Uses the display name (Name @handle) directly
+    — this branch is self-contained, it never goes through the [@N] substitution."""
     lines = [f"По топику «{topic}» найдено только {len(fragments)} сообщений — "
              f"недостаточно для дайджеста.\n"]
     for f in fragments:
-        has_real_author = f.get('sender_id') is not None or f.get('author_name')
-        name = (f.get('author_name') if has_real_author else 'аноним') or 'аноним'
-        lines.append(f"• [{name}] ({(f['created_at'] or '')[:10]}) {f['text'][:150]}")
+        lines.append(f"• {_display_name(f)} ({(f['created_at'] or '')[:10]}) {f['text'][:150]}")
     return "\n".join(lines)
 
 
