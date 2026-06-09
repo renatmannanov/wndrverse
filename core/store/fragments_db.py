@@ -13,6 +13,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB, ARRAY
 from datetime import datetime
+import json
 import logging
 
 import core.db as _db
@@ -524,6 +525,79 @@ def get_all_embedded_fragments() -> list[dict]:
             }
             for r in results
         ]
+    finally:
+        session.close()
+
+
+def get_embedded_fragments_for_period(
+    topic: str,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    min_chars: int = 1,        # input flood-filter lives in brain.topics, not here
+) -> list[dict]:
+    """Embedded fragments of ONE topic in a period, for hot-topic clustering.
+
+    Filters: topic == topic, created_at in [since, until) (until EXCLUSIVE),
+    embedding IS NOT NULL, is_duplicate IS NOT TRUE, char_length >= min_chars.
+    Sorted by created_at (so the FIRST message of a cluster = the anchor).
+
+    Returns [{id, text, created_at(ISO str), sender_id, embedding(list[float]),
+              channel_id, external_id, reactions(list|None), tags}, ...].
+    reactions = metadata->'reactions' (JSONB → python list; SQLAlchemy returns the
+    array as a python list directly — verified 2026-06-09 on the local DB). The
+    isinstance-str fallback is defensive only. PII (sender_id) stays local; only
+    `text` is ever sent to OpenAI downstream.
+    """
+    if not _pgvector_available():
+        logging.warning("get_embedded_fragments_for_period called but pgvector is not available")
+        return []
+
+    session = SessionLocal()
+    try:
+        query = (
+            session.query(
+                Fragment.id,
+                Fragment.text,
+                Fragment.created_at,
+                Fragment.sender_id,
+                Fragment.embedding,
+                Fragment.channel_id,
+                Fragment.external_id,
+                Fragment.metadata_['reactions'].label('reactions'),
+                Fragment.tags,
+            )
+            .filter(Fragment.topic == topic)
+            .filter(Fragment.embedding.isnot(None))
+            .filter(Fragment.is_duplicate.isnot(True))
+            .filter(func.char_length(Fragment.text) >= min_chars)
+        )
+        if since is not None:
+            query = query.filter(Fragment.created_at >= since)
+        if until is not None:
+            query = query.filter(Fragment.created_at < until)
+        query = query.order_by(Fragment.created_at)
+
+        results = query.all()
+        out = []
+        for r in results:
+            reactions = r.reactions
+            if isinstance(reactions, str):
+                try:
+                    reactions = json.loads(reactions)
+                except (ValueError, TypeError):
+                    reactions = None
+            out.append({
+                'id': r.id,
+                'text': r.text,
+                'created_at': r.created_at.isoformat() if r.created_at else None,
+                'sender_id': r.sender_id,
+                'embedding': list(r.embedding),
+                'channel_id': r.channel_id,
+                'external_id': r.external_id,
+                'reactions': reactions,
+                'tags': r.tags or [],
+            })
+        return out
     finally:
         session.close()
 

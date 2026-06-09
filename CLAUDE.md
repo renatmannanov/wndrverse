@@ -62,6 +62,31 @@ SELECT, not ON CONFLICT — keys must match byte-for-byte). chat_id is the
 (`fetch_topic.py` writes `chat_id`; separate repo). DB backups (`*.sql`) are
 gitignored — they hold PII.
 
+### Hot-topics digest (delivery topics) — experimental, variant A
+
+```bash
+python -m delivery topics --topic boltalka --period 1m [--channel stdout] [--limit N]
+```
+
+A SECOND, experimental digest mode, parallel to the people-grouping digest (which
+it does NOT touch). Takes messages of ONE topic over a period, clusters them by
+meaning (existing embeddings + UMAP→HDBSCAN), ranks themes by "hotness"
+(msgs+likes+authors) and renders `emoji + name + (N сообщений) + t.me link`. Link
+anchor = the EARLIEST message of the cluster (likes only rank, never anchor).
+`--topic all` is rejected (variant A is single-topic; cross-topic = future).
+
+Pipeline: `get_embedded_fragments_for_period` (store) → `build_topics`
+(core/brain/topics.py — 3 quality layers: flood-filter → HDBSCAN noise → authors+
+probability) → `topics_render` (delivery) → CLI. The pure clustering core is
+`cluster_embeddings` in `core/brain/clustering.py` (shared with corpus
+`run_clustering`); it falls back to UMAP `init='random'` on small slices to dodge
+the spectral-init `eigsh k>=N` crash. Calibrated thresholds (min_chars=80,
+min_cluster_size=3, min_authors=2, min_probability=0.05) live in `build_topics`
+with a comment. LLM topic names use `core/prompts/topic_label.md`; PII stays local
+(only message text → OpenAI, names/sender_id never leave). A narrow 1-week slice
+may yield few/zero topics by design (little data after the flood-filter). stdout
+only — Telegram delivery / bot command / scheduler are out of scope for this MVP.
+
 ### Realtime ingest bot (bot/) — live group → fragments
 
 ```bash

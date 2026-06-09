@@ -26,15 +26,63 @@ UMAP_RANDOM_STATE = 42
 _PROMPTS_DIR = os.path.join(os.path.dirname(__file__), os.pardir, "prompts")
 
 
-def run_clustering(min_cluster_size: int = 5, min_samples: int = 3) -> dict:
-    """UMAP dim-reduction + HDBSCAN clustering of embeddings. Saves a new version.
+def cluster_embeddings(
+    vectors: list[list[float]],
+    *,
+    min_cluster_size: int = 3,
+    min_samples: int | None = None,
+    umap_n_components: int = UMAP_N_COMPONENTS,
+) -> tuple[list[int], list[float]]:
+    """UMAP-reduce + HDBSCAN. Pure: vectors in, (labels, probabilities) out.
 
-    Requires hdbscan + umap-learn (requirements-clustering.txt).
+    labels[i] = cluster id of vectors[i], or -1 for noise.
+    probabilities[i] = HDBSCAN cluster-membership strength [0..1] (0 for noise),
+      used downstream to drop loosely-attached points.
+    NO DB access, NO version write. Imports hdbscan/umap lazily (heavy deps).
+
+    For SMALL slices (one topic/period — tens of vectors), the corpus-wide UMAP
+    params are too aggressive; the caller passes a smaller min_cluster_size and may
+    skip/shrink UMAP. If len(vectors) < umap_n_components, UMAP n_components is
+    clamped to max(2, len(vectors)-1) so it doesn't error on tiny inputs.
     """
     import numpy as np
     import hdbscan
     import umap
 
+    n = len(vectors)
+    if n < min_cluster_size:
+        # nothing to cluster — everything is noise
+        return ([-1] * n, [0.0] * n)
+
+    matrix = np.array(vectors)
+    n_comp = min(umap_n_components, max(2, n - 1))
+    # UMAP's default spectral init calls scipy eigsh, which raises "k >= N" on
+    # small inputs (a narrow topic/period — tens of vectors). For small N fall back
+    # to random init, which is stable there; the corpus-wide path (thousands of
+    # vectors) keeps the default spectral init. Threshold chosen empirically during
+    # step-7 calibration (1-week boltalka collapsed to ~3 fragments → crash).
+    init = 'random' if n <= 4 * n_comp else 'spectral'
+    reducer = umap.UMAP(
+        n_components=n_comp, metric='cosine',
+        n_neighbors=min(UMAP_N_NEIGHBORS, max(2, n - 1)), min_dist=0.0,
+        random_state=UMAP_RANDOM_STATE, init=init,
+    )
+    reduced = reducer.fit_transform(matrix)
+
+    clusterer = hdbscan.HDBSCAN(
+        min_cluster_size=min_cluster_size, min_samples=min_samples,
+        metric='euclidean', cluster_selection_method='eom',
+    )
+    clusterer.fit(reduced)
+    return (clusterer.labels_.tolist(), clusterer.probabilities_.tolist())
+
+
+def run_clustering(min_cluster_size: int = 5, min_samples: int = 3) -> dict:
+    """UMAP dim-reduction + HDBSCAN clustering of embeddings. Saves a new version.
+
+    Requires hdbscan + umap-learn (requirements-clustering.txt). Thin wrapper over
+    cluster_embeddings() (the pure core) that adds DB load + version save.
+    """
     fragments = get_all_embedded_fragments()
     if not fragments:
         return {'version': 0, 'n_clusters': 0, 'n_noise': 0, 'n_total': 0, 'clusters': []}
@@ -44,20 +92,12 @@ def run_clustering(min_cluster_size: int = 5, min_samples: int = 3) -> dict:
                 n_total, min_cluster_size, min_samples)
 
     ids = [f['id'] for f in fragments]
-    matrix = np.array([f['embedding'] for f in fragments])
+    vectors = [f['embedding'] for f in fragments]
 
-    logger.info("UMAP reducing %d → %d dims", matrix.shape[1], UMAP_N_COMPONENTS)
-    reducer = umap.UMAP(
-        n_components=UMAP_N_COMPONENTS, metric='cosine',
-        n_neighbors=UMAP_N_NEIGHBORS, min_dist=0.0, random_state=UMAP_RANDOM_STATE,
+    logger.info("UMAP reducing → %d dims", UMAP_N_COMPONENTS)
+    labels, _probs = cluster_embeddings(
+        vectors, min_cluster_size=min_cluster_size, min_samples=min_samples,
     )
-    reduced = reducer.fit_transform(matrix)
-
-    clusterer = hdbscan.HDBSCAN(
-        min_cluster_size=min_cluster_size, min_samples=min_samples,
-        metric='euclidean', cluster_selection_method='eom',
-    )
-    labels = clusterer.fit_predict(reduced)
 
     cluster_map: dict[int, list[int]] = {}
     n_noise = 0

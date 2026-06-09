@@ -15,9 +15,14 @@ import sys
 import logging
 from datetime import datetime, timedelta
 
-from core.store.fragments_db import get_fragments_for_digest, get_fragments_by_ids
+from core.store.fragments_db import (
+    get_fragments_for_digest, get_fragments_by_ids,
+    get_embedded_fragments_for_period,
+)
 from core.brain.synthesis import synthesize_and_save, TOPIC_HINTS, TOPIC_DISPLAY_NAMES
+from core.brain.topics import build_topics
 from delivery import channels
+from delivery.topics_render import render_topics
 
 logger = logging.getLogger(__name__)
 
@@ -207,6 +212,34 @@ def _run_digest(topic_arg: str, period: str, channel: str) -> int:
     return 0
 
 
+def _run_topics(topic_arg: str, period: str, channel: str, limit: int | None) -> int:
+    """Hot-topics digest (experimental, variant A): cluster ONE topic → ranked themes.
+
+    Thin glue: store → brain.topics.build_topics → delivery.topics_render → send.
+    Reuses parse_period + _digest_header. 0 fragments / 0 topics → a friendly line
+    to STDOUT (not just a log) and NO OpenAI spend.
+    """
+    if topic_arg == "all":
+        raise SystemExit("topics поддерживает только ОДИН топик (вариант А), не 'all'")
+    since = parse_period(period)
+    until = None
+    frags = get_embedded_fragments_for_period(topic_arg, since=since, until=until)
+    header = _digest_header(topic_arg, since, until)
+    if not frags:
+        channels.send(f"{header}\n\nЗа период сообщений не найдено.", channel=channel)
+        return 0
+    topics = build_topics(frags, limit=limit)
+    if not topics:
+        channels.send(
+            f"{header}\n\nЗа период тем не найдено (всё отсеяно как флуд/шум).",
+            channel=channel,
+        )
+        return 0
+    text = render_topics(header, topics)
+    channels.send(text, channel=channel)
+    return 0
+
+
 def _main(argv: list[str]) -> int:
     import argparse
 
@@ -224,10 +257,19 @@ def _main(argv: list[str]) -> int:
     d.add_argument("--topic", required=True, help="topic name (offerings/harvest/...) or 'all'")
     d.add_argument("--period", default="all", help="1w / 3d / 12h / 1m / all")
     d.add_argument("--channel", default="stdout", help="stdout (telegram_* are future)")
+
+    t = sub.add_parser("topics", help="Hot-topics digest (experimental, variant A)")
+    t.add_argument("--topic", required=True, help="ONE topic name (boltalka/...); 'all' not supported")
+    t.add_argument("--period", default="all", help="1w / 3d / 12h / 1m / all")
+    t.add_argument("--channel", default="stdout", help="stdout (telegram_* are future)")
+    t.add_argument("--limit", type=int, default=None, help="top-N topics (default: all)")
+
     args = parser.parse_args(argv)
 
     if args.command == "digest":
         return _run_digest(args.topic, args.period, args.channel)
+    elif args.command == "topics":
+        return _run_topics(args.topic, args.period, args.channel, args.limit)
     parser.error(f"unknown command: {args.command}")
     return 2
 
