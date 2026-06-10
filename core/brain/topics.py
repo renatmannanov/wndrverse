@@ -24,6 +24,10 @@ _PROMPTS_DIR = os.path.join(os.path.dirname(__file__), os.pardir, "prompts")
 
 _WORD_RE = re.compile(r"\w+", re.UNICODE)
 
+# Anchor pick: a member this tightly attached (HDBSCAN probability) is "core"
+# enough to represent the cluster; below it we risk linking a vocabulary-stray.
+ANCHOR_MIN_PROBABILITY = 0.9
+
 
 def _is_substantive(text: str) -> bool:
     """Heuristic flood-filter: True if the text carries real content.
@@ -79,14 +83,16 @@ def build_topics(
 
     # Group kept by label, skipping noise (-1) AND loosely-attached points
     # (probs[i] < min_probability) — layer 3, applied HERE so loose points don't
-    # reach cluster_stats and inflate msgs/likes.
+    # reach cluster_stats and inflate msgs/likes. Each member carries its HDBSCAN
+    # probability (copy, not mutation — kept[i] aliases the caller's dict) so the
+    # anchor pick below can prefer tightly-attached messages.
     clusters: dict[int, list[dict]] = {}
     for i, label in enumerate(labels):
         if label == -1:
             continue
         if probs[i] < min_probability:
             continue
-        clusters.setdefault(label, []).append(kept[i])
+        clusters.setdefault(label, []).append({**kept[i], 'probability': probs[i]})
 
     # --- Layer 3: collect clusters, drop monologues (< min_authors) ---
     built = []
@@ -94,7 +100,14 @@ def build_topics(
         stats = hotness.cluster_stats(members)
         if stats['authors'] < min_authors:
             continue
-        anchor = min(members, key=lambda m: m['created_at'])  # first by time
+        # Anchor: earliest TIGHTLY-attached message (prob >= threshold), falling
+        # back to plain earliest. The earliest member overall is often the
+        # loosest one — a vocabulary-stray glued to the cluster's edge before the
+        # real conversation ignites — and anchoring there sends the t.me link to
+        # an unrelated message (calibrated 2026-06-10 on boltalka May: fixes 4 of
+        # the top-10 anchors, e.g. birthdays anchored at an off-topic greeting).
+        tight = [m for m in members if m['probability'] >= ANCHOR_MIN_PROBABILITY]
+        anchor = min(tight or members, key=lambda m: m['created_at'])
         built.append({
             'members': members,
             'stats': stats,

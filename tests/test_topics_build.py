@@ -58,6 +58,56 @@ def test_build_topics_two_clusters_ranked(monkeypatch):
         assert t['name'] == "стаб-тема"
 
 
+def test_anchor_skips_loose_early_member(monkeypatch):
+    """The anchor is the earliest TIGHT member; a loose early stray must not win.
+
+    Doesn't run real clustering — drives build_topics' grouping via a stubbed
+    cluster_embeddings so probabilities are exact and deterministic.
+    """
+    monkeypatch.setattr(topics_mod, "complete", lambda *a, **k: "x")
+    txt = ("осмысленный длинный текст про важную тему сообщества и подробное "
+           "обсуждение деталей разных аспектов вопроса участниками чата")
+    # 4 fragments, one cluster: the EARLIEST one is loosely attached (p=0.5),
+    # the next-earliest tight one (p=0.95) must become the anchor.
+    frags = [
+        _frag(0, [0.0] * 4, sender=1, text=txt + " stray",
+              ts="2026-05-01T00:00:00"),
+        _frag(1, [0.0] * 4, sender=2, text=txt + " core1",
+              ts="2026-05-02T00:00:00"),
+        _frag(2, [0.0] * 4, sender=1, text=txt + " core2",
+              ts="2026-05-03T00:00:00"),
+        _frag(3, [0.0] * 4, sender=2, text=txt + " core3",
+              ts="2026-05-04T00:00:00"),
+    ]
+    monkeypatch.setattr(
+        topics_mod, "cluster_embeddings",
+        lambda vectors, **k: ([0, 0, 0, 0], [0.5, 0.95, 1.0, 1.0]))
+    out = build_topics(frags, min_authors=2)
+    assert len(out) == 1
+    # tg_..._1001 = fragment id 1 (earliest with prob >= 0.9), NOT the stray 1000
+    assert out[0]['anchor_external_id'] == 'tg_-1002924475859_1001'
+    # the stray still counts as a member (only the anchor changed)
+    assert out[0]['msgs'] == 4
+
+
+def test_anchor_falls_back_when_no_tight_members(monkeypatch):
+    """All members loose (< 0.9) -> plain earliest wins (no crash, no empty)."""
+    monkeypatch.setattr(topics_mod, "complete", lambda *a, **k: "x")
+    txt = ("осмысленный длинный текст про важную тему сообщества и подробное "
+           "обсуждение деталей разных аспектов вопроса участниками чата")
+    frags = [
+        _frag(i, [0.0] * 4, sender=1 + (i % 2), text=txt + f" m{i}",
+              ts=f"2026-05-0{i + 1}T00:00:00")
+        for i in range(3)
+    ]
+    monkeypatch.setattr(
+        topics_mod, "cluster_embeddings",
+        lambda vectors, **k: ([0, 0, 0], [0.5, 0.6, 0.7]))
+    out = build_topics(frags, min_authors=2)
+    assert len(out) == 1
+    assert out[0]['anchor_external_id'] == 'tg_-1002924475859_1000'  # earliest
+
+
 def test_monologue_dropped(monkeypatch):
     monkeypatch.setattr(topics_mod, "complete", lambda *a, **k: "x")
     rng = np.random.default_rng(2)
