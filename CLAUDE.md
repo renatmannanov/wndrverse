@@ -172,6 +172,9 @@ Deployed 2026-06-04 to the VPS (`rm_agent@62.238.31.95`, see deploy map). The
 core/bot/digest pipeline lives in **`~/wndrverse`** (its own dir in home — NOT
 inside `~/claude-hub`, which is a separate git scaffold for Claude SDK agents).
 Docker (postgres+pgvector on :5434) + a Python venv (`~/wndrverse/.venv`).
+The venv also needs `requirements-clustering.txt` (umap-learn + hdbscan,
+installed 2026-06-10) — `/topics` imports them lazily inside the handler, so a
+missing install does NOT fail at bot startup, only at the first /topics call.
 
 The corpus was moved by a **full `pg_dump`** of the local DB (DDL + `CREATE
 EXTENSION vector` + data) restored into a fresh empty DB — NO `core.db init`
