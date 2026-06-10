@@ -161,7 +161,9 @@ def test_embedding_weighted_by_length():
     assert expected > 0.5  # shifted toward the longer text
 
 
-def test_root_is_earliest_even_if_short():
+def test_root_is_earliest_substantive_not_short_starter():
+    """root = earliest SUBSTANTIVE message: a short chain-starter (e.g. an
+    orphan reply to an uningested кружочек) must not become the anchor."""
     frags = [
         _frag(0, sender=1, msg_id="10", text="привет всем тут", vec=[2.0, 2.0],
               ts="2026-05-01T00:00:00"),
@@ -170,8 +172,40 @@ def test_root_is_earliest_even_if_short():
     ]
     docs = build_chains(frags)
     assert len(docs) == 1
-    assert docs[0]['root']['id'] == 0          # earliest, even though short
+    assert docs[0]['root']['id'] == 1          # earliest substantive, not the short starter
+    assert docs[0]['messages'][0]['id'] == 0   # messages still keep the full chain
     assert [m['id'] for m in docs[0]['substantive']] == [1]
+
+
+def test_series_not_glued_across_different_reply_targets():
+    """Real case 13599/13600: same author, 16s apart, but each message replies
+    to a DIFFERENT (absent) parent — two unrelated micro-contexts, NOT a series.
+    The short orphan ends up alone → its doc has no substantive → dropped."""
+    frags = [
+        _frag(0, sender=1, msg_id="13599", reply_to="13594",
+              text="мир тебя видит и празднует", ts="2026-05-01T00:00:00"),
+        _frag(1, sender=1, msg_id="13600", reply_to="13597",
+              ts="2026-05-01T00:00:16"),
+    ]
+    docs = build_chains(frags)
+    assert len(docs) == 1                      # the short orphan doc is dropped
+    assert [m['msg_id'] for m in docs[0]['messages']] == ["13600"]
+
+
+def test_series_glued_when_same_parent_or_no_reply():
+    """Same-parent replies and reply→continuation (None) are still series."""
+    # both reply to the same absent parent — one context, glued
+    same_parent = [
+        _frag(0, sender=1, msg_id="20", reply_to="5", ts="2026-05-01T00:00:00"),
+        _frag(1, sender=1, msg_id="21", reply_to="5", ts="2026-05-01T00:01:00"),
+    ]
+    assert len(build_chains(same_parent)) == 1
+    # reply followed by a no-reply continuation — glued (longread pattern)
+    continuation = [
+        _frag(0, sender=1, msg_id="30", reply_to="5", ts="2026-05-01T00:00:00"),
+        _frag(1, sender=1, msg_id="31", ts="2026-05-01T00:01:00"),
+    ]
+    assert len(build_chains(continuation)) == 1
 
 
 def test_dicts_without_msg_id_keys_survive():

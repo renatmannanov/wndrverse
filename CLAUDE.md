@@ -80,14 +80,19 @@ Pipeline: `get_embedded_fragments_for_period` (store) → `build_chains`
 (delivery) → CLI. `build_chains` (2026-06-10) merges reply links
 (`metadata.reply_to_msg_id`, string-compared with the `external_id` digit tail)
 plus series — consecutive messages of ONE author ≤300s apart, per-SENDER
-adjacency, so interleaved other-author messages don't break a longread series.
-Document embedding = length-weighted mean of its substantive message vectors
-(no re-embedding; `_is_substantive` lives in chains.py, re-exported by
-topics.py). In the rendered digest `N сообщений` counts only substantive
-messages, but likes/authors of short reactions DO feed hotness
-(`hotness.chain_cluster_stats`). Link anchor = the `root` (earliest message) of
-the earliest tightly-attached document — i.e. the conversation start, not a
-reaction or a vocabulary-stray. The pure clustering core is
+adjacency, so interleaved other-author messages don't break a longread series;
+EXCEPTION: two messages replying to DIFFERENT parents are never series-linked
+(the author answers two conversations, not continues one — otherwise orphan
+replies to uningested media messages glue into frankendocs). Document embedding
+= length-weighted mean of its substantive message vectors (no re-embedding;
+`_is_substantive` lives in chains.py, re-exported by topics.py). In the
+rendered digest `N сообщений` counts only substantive messages, but
+likes/authors of short reactions DO feed hotness
+(`hotness.chain_cluster_stats`). Link anchor = the `root` (earliest SUBSTANTIVE
+message, so a short reaction can't be the link target) of the earliest
+tightly-attached document. Replies whose parent is NOT in the corpus (media
+without text is never ingested; pre-period parents) become chain roots by
+design — such an anchor can read mid-context. The pure clustering core is
 `cluster_embeddings` in `core/brain/clustering.py` (shared with corpus
 `run_clustering`); it falls back to UMAP `init='random'` on small slices to dodge
 the spectral-init `eigsh k>=N` crash. Calibrated thresholds (min_chars=80,

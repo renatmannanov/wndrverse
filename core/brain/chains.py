@@ -11,6 +11,11 @@ Two link kinds (union-find over fragment indices):
      reply between them, and other authors interleave even within the same
      second (real case 2026-06-10: msg 14068 landed between longread parts
      14067/14069) — global-timeline adjacency would break such series.
+     EXCEPTION: two messages that each reply to DIFFERENT parents are NOT
+     series-linked — the author is answering in two different conversations,
+     not continuing one (real case 2026-06-10: 13599/13600, same author 16s
+     apart, replies to two different absent media messages — gluing them made
+     a frankendoc of two unrelated micro-contexts that anchored a whole topic).
 
 Each connected component becomes a document clustered as ONE point — so
 short reactions ("спасибо за лонгрид") ride along with their thread instead
@@ -77,7 +82,11 @@ def build_chains(
       'messages':    list[dict],   # ALL chain members, sorted by created_at
       'substantive': list[dict],   # flood-filter survivors (subset of messages)
       'embedding':   list[float],  # length-weighted mean over substantive
-      'root':        dict,         # messages[0] — thread start (the anchor)
+      'root':        dict,         # substantive[0] — earliest SUBSTANTIVE
+                                   # message (the anchor); a short reaction at
+                                   # the chain start (e.g. an orphan reply to
+                                   # an uningested media message) must not
+                                   # become the topic's t.me link
     }, ...] sorted by root created_at.
 
     Documents with NO substantive message are dropped (that's flood; the old
@@ -116,6 +125,10 @@ def build_chains(
             by_sender.setdefault(s, []).append(i)
     for idxs in by_sender.values():
         for prev, cur in zip(idxs, idxs[1:]):
+            rp = fragments[prev].get('reply_to_msg_id')
+            rc = fragments[cur].get('reply_to_msg_id')
+            if rp is not None and rc is not None and rp != rc:
+                continue  # answers in two different conversations, not a series
             tp, tc = _ts(fragments[prev]), _ts(fragments[cur])
             if tp is None or tc is None:
                 continue
@@ -143,7 +156,7 @@ def build_chains(
             'messages': messages,
             'substantive': substantive,
             'embedding': embedding,
-            'root': messages[0],
+            'root': substantive[0],
         })
 
     docs.sort(key=lambda d: _ts(d['root']) or datetime.min)
