@@ -11,39 +11,22 @@ never leave this module.
 """
 
 import os
-import re
 import logging
 
 from core.brain.clustering import cluster_embeddings
 from core.brain import hotness
 from core.llm.client import complete
+# _is_substantive lives in chains.py now (re-exported here for existing
+# importers/tests); import direction is topics → chains only, never back.
+from core.brain.chains import build_chains, _is_substantive  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
 _PROMPTS_DIR = os.path.join(os.path.dirname(__file__), os.pardir, "prompts")
 
-_WORD_RE = re.compile(r"\w+", re.UNICODE)
-
 # Anchor pick: a member this tightly attached (HDBSCAN probability) is "core"
 # enough to represent the cluster; below it we risk linking a vocabulary-stray.
 ANCHOR_MIN_PROBABILITY = 0.9
-
-
-def _is_substantive(text: str) -> bool:
-    """Heuristic flood-filter: True if the text carries real content.
-
-    Drops low-information messages: fewer than 3 unique words, or mostly
-    emoji/punctuation (alphanumeric-char ratio < 0.3).
-    """
-    if not text:
-        return False
-    words = _WORD_RE.findall(text.lower())
-    if len(set(words)) < 3:
-        return False
-    alnum = sum(1 for ch in text if ch.isalnum())
-    if alnum / len(text) < 0.3:
-        return False
-    return True
 
 
 def build_topics(
@@ -56,7 +39,12 @@ def build_topics(
     # flood-filter). min_chars=80 + _is_substantive cut short chatter; min_authors=2
     # drops monologues; min_probability=0.05 trims loosely-attached points.
     min_chars: int = 80,        # layer 1: input filter for short/flood
-    min_cluster_size: int = 3,  # layer 2: HDBSCAN — a topic is ≥ N messages
+    # Recalibrated 2026-06-10 for DOCUMENT clustering (reply chains): boltalka
+    # May = 707 fragments → 114 docs. mcs=3 gave 7 topics but rank#1 was a
+    # 38-doc mega-cluster gluing 3 unrelated conversations; mcs=2 gives 14
+    # topics with those conversations separated (user decision 2026-06-10).
+    # "2 docs" ≥ a substantive thread each — not 2 lone messages.
+    min_cluster_size: int = 2,  # layer 2: HDBSCAN — a topic is ≥ N documents
     min_authors: int = 2,       # layer 3: a topic is ≥2 people, not a monologue
     min_probability: float = 0.05,  # layer 3: drop loosely-attached points
     limit: int | None = None,   # top-N topics; None = all that pass the filters
@@ -67,52 +55,52 @@ def build_topics(
     descending hotness (hotness.score). PII: only texts go to OpenAI; names/
     sender_id stay here.
     """
-    # --- Layer 1: drop junk BEFORE clustering ---
-    kept = [
-        f for f in fragments
-        if len(f.get('text') or '') >= min_chars and _is_substantive(f['text'])
-    ]
-    logger.info("build_topics: %d fragments → %d after flood-filter (min_chars=%d)",
-                len(fragments), len(kept), min_chars)
-    if len(kept) < min_cluster_size:
+    # --- Layer 1: glue reply chains/series into documents; the flood-filter
+    # (min_chars + _is_substantive) lives inside build_chains now — a document
+    # with no substantive message is dropped there, but reactions riding along
+    # a substantive thread stay in 'messages' (their likes/authors count).
+    docs = build_chains(fragments, min_chars=min_chars)
+    logger.info("build_topics: %d fragments → %d docs after chains (min_chars=%d)",
+                len(fragments), len(docs), min_chars)
+    if len(docs) < min_cluster_size:
         return []
 
-    # --- Layer 2: cluster (order of `kept` is preserved so labels[i] ↔ kept[i]) ---
-    vectors = [f['embedding'] for f in kept]
+    # --- Layer 2: cluster documents (order preserved so labels[i] ↔ docs[i]) ---
+    vectors = [d['embedding'] for d in docs]
     labels, probs = cluster_embeddings(vectors, min_cluster_size=min_cluster_size)
 
-    # Group kept by label, skipping noise (-1) AND loosely-attached points
-    # (probs[i] < min_probability) — layer 3, applied HERE so loose points don't
-    # reach cluster_stats and inflate msgs/likes. Each member carries its HDBSCAN
-    # probability (copy, not mutation — kept[i] aliases the caller's dict) so the
-    # anchor pick below can prefer tightly-attached messages.
+    # Group docs by label, skipping noise (-1) AND loosely-attached points
+    # (probs[i] < min_probability) — layer 3, applied HERE so loose docs don't
+    # reach chain_cluster_stats and inflate msgs/likes. Each member carries its
+    # HDBSCAN probability (copy, not mutation) so the anchor pick below can
+    # prefer tightly-attached documents.
     clusters: dict[int, list[dict]] = {}
     for i, label in enumerate(labels):
         if label == -1:
             continue
         if probs[i] < min_probability:
             continue
-        clusters.setdefault(label, []).append({**kept[i], 'probability': probs[i]})
+        clusters.setdefault(label, []).append({**docs[i], 'probability': probs[i]})
 
     # --- Layer 3: collect clusters, drop monologues (< min_authors) ---
     built = []
     for label, members in clusters.items():
-        stats = hotness.cluster_stats(members)
+        stats = hotness.chain_cluster_stats(members)
         if stats['authors'] < min_authors:
             continue
-        # Anchor: earliest TIGHTLY-attached message (prob >= threshold), falling
-        # back to plain earliest. The earliest member overall is often the
-        # loosest one — a vocabulary-stray glued to the cluster's edge before the
-        # real conversation ignites — and anchoring there sends the t.me link to
-        # an unrelated message (calibrated 2026-06-10 on boltalka May: fixes 4 of
-        # the top-10 anchors, e.g. birthdays anchored at an off-topic greeting).
-        tight = [m for m in members if m['probability'] >= ANCHOR_MIN_PROBABILITY]
-        anchor = min(tight or members, key=lambda m: m['created_at'])
+        # Anchor: earliest TIGHTLY-attached DOCUMENT (prob >= threshold), falling
+        # back to plain earliest; the anchor message is that document's root —
+        # the thread start. Same logic as the per-message anchor fix (ab6af26,
+        # calibrated 2026-06-10): the earliest member overall is often a
+        # vocabulary-stray glued to the cluster's edge, and anchoring there
+        # sends the t.me link to an unrelated message.
+        tight = [d for d in members if d['probability'] >= ANCHOR_MIN_PROBABILITY]
+        anchor_doc = min(tight or members, key=lambda d: d['root']['created_at'])
         built.append({
             'members': members,
             'stats': stats,
-            'anchor_channel_id': anchor['channel_id'],
-            'anchor_external_id': anchor['external_id'],
+            'anchor_channel_id': anchor_doc['root']['channel_id'],
+            'anchor_external_id': anchor_doc['root']['external_id'],
         })
 
     if not built:
@@ -136,9 +124,14 @@ def build_topics(
 
     result = []
     for c in built:
-        members = sorted(c['members'], key=lambda m: m['created_at'])
-        step = max(1, len(members) // 5)
-        samples = [members[j] for j in range(0, len(members), step)][:5]
+        # Documents have no 'text' — sample over the flattened substantive
+        # messages of all the cluster's chains (same even-step scheme as before).
+        flat = sorted(
+            (m for d in c['members'] for m in d['substantive']),
+            key=lambda m: m['created_at'],
+        )
+        step = max(1, len(flat) // 5)
+        samples = [flat[j] for j in range(0, len(flat), step)][:5]
         # PII: ONLY message text goes into the prompt — never sender_id/author_name/etc.
         sample_texts = "\n---\n".join(f['text'] for f in samples)
         prompt = template.format(sample_texts=sample_texts)

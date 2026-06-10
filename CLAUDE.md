@@ -69,20 +69,30 @@ python -m delivery topics --topic boltalka --period 1m [--channel stdout] [--lim
 ```
 
 A SECOND, experimental digest mode, parallel to the people-grouping digest (which
-it does NOT touch). Takes messages of ONE topic over a period, clusters them by
-meaning (existing embeddings + UMAP→HDBSCAN), ranks themes by "hotness"
-(msgs+likes+authors) and renders `emoji + name + (N сообщений) + t.me link`. Link
-anchor = the EARLIEST message of the cluster (likes only rank, never anchor).
-`--topic all` is rejected (variant A is single-topic; cross-topic = future).
+it does NOT touch). Takes messages of ONE topic over a period, glues them into
+reply-thread DOCUMENTS, clusters the documents by meaning (existing embeddings +
+UMAP→HDBSCAN), ranks themes by "hotness" (msgs+likes+authors) and renders
+`emoji + name + (N сообщений) + t.me link`. `--topic all` is rejected (variant A
+is single-topic; cross-topic = future).
 
-Pipeline: `get_embedded_fragments_for_period` (store) → `build_topics`
-(core/brain/topics.py — 3 quality layers: flood-filter → HDBSCAN noise → authors+
-probability) → `topics_render` (delivery) → CLI. The pure clustering core is
+Pipeline: `get_embedded_fragments_for_period` (store) → `build_chains`
+(core/brain/chains.py) → `build_topics` (core/brain/topics.py) → `topics_render`
+(delivery) → CLI. `build_chains` (2026-06-10) merges reply links
+(`metadata.reply_to_msg_id`, string-compared with the `external_id` digit tail)
+plus series — consecutive messages of ONE author ≤300s apart, per-SENDER
+adjacency, so interleaved other-author messages don't break a longread series.
+Document embedding = length-weighted mean of its substantive message vectors
+(no re-embedding; `_is_substantive` lives in chains.py, re-exported by
+topics.py). In the rendered digest `N сообщений` counts only substantive
+messages, but likes/authors of short reactions DO feed hotness
+(`hotness.chain_cluster_stats`). Link anchor = the `root` (earliest message) of
+the earliest tightly-attached document — i.e. the conversation start, not a
+reaction or a vocabulary-stray. The pure clustering core is
 `cluster_embeddings` in `core/brain/clustering.py` (shared with corpus
 `run_clustering`); it falls back to UMAP `init='random'` on small slices to dodge
 the spectral-init `eigsh k>=N` crash. Calibrated thresholds (min_chars=80,
-min_cluster_size=3, min_authors=2, min_probability=0.05) live in `build_topics`
-with a comment. LLM topic names use `core/prompts/topic_label.md`; PII stays local
+min_cluster_size=2 — recalibrated 2026-06-10 for document clustering,
+min_authors=2, min_probability=0.05) live in `build_topics` with a comment. LLM topic names use `core/prompts/topic_label.md`; PII stays local
 (only message text → OpenAI, names/sender_id never leave). A narrow 1-week slice
 may yield few/zero topics by design (little data after the flood-filter). Output:
 stdout (CLI) or the ingest bot's `/topics` command (DM, see below). The shared

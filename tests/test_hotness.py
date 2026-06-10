@@ -1,6 +1,6 @@
 """Unit tests for core.brain.hotness — pure reaction/score functions, no DB/LLM."""
 
-from core.brain.hotness import likes_of, cluster_stats, score
+from core.brain.hotness import likes_of, cluster_stats, chain_cluster_stats, score
 
 
 def test_likes_of():
@@ -22,6 +22,36 @@ def test_cluster_stats():
     assert st['msgs'] == 3
     assert st['authors'] == 1   # None not counted, duplicate id=1 collapsed
     assert st['likes'] == 5
+
+
+def test_chain_cluster_stats():
+    """Documents (build_chains contract): msgs counts SUBSTANTIVE only,
+    likes/authors run over ALL messages — reactions contribute."""
+    long_msg = {'sender_id': 1, 'reactions': [{'count': 2, 'emoji': 'a'}]}
+    react_1 = {'sender_id': 2, 'reactions': [{'count': 7, 'emoji': 'b'}]}
+    react_2 = {'sender_id': None, 'reactions': None}
+    doc_a = {
+        'messages': [long_msg, react_1, react_2],
+        'substantive': [long_msg],
+    }
+    other = {'sender_id': 2, 'reactions': []}
+    doc_b = {
+        'messages': [other],
+        'substantive': [other],
+    }
+    st = chain_cluster_stats([doc_a, doc_b])
+    assert st['msgs'] == 2       # substantive only — reactions NOT counted
+    assert st['likes'] == 9      # 2 (long) + 7 (reaction's likes DO count)
+    assert st['authors'] == 2    # senders 1 and 2; None not counted
+
+
+def test_chain_cluster_stats_empty_reactions_and_missing_keys():
+    doc = {
+        'messages': [{'sender_id': 5}],   # no 'reactions' key at all
+        'substantive': [{'sender_id': 5}],
+    }
+    st = chain_cluster_stats([doc])
+    assert st == {'msgs': 1, 'likes': 0, 'authors': 1}
 
 
 def test_score_full_and_zero():

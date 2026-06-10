@@ -48,6 +48,31 @@ def cluster_stats(members: list[dict]) -> dict:
     return {'msgs': msgs, 'likes': likes, 'authors': authors}
 
 
+def chain_cluster_stats(documents: list[dict]) -> dict:
+    """Aggregates of a cluster built from thread documents (build_chains contract).
+
+    documents — [{'messages', 'substantive', ...}] of one cluster.
+    Returns {'msgs': int, 'likes': int, 'authors': int} where:
+      msgs    = sum(len(d['substantive']))  — digest counts SUBSTANTIVE messages
+                only (user decision 2026-06-10: reactions don't inflate "N сообщений")
+      likes   = likes over ALL messages of all chains — reactions DO contribute
+                their likes to hotness even though they're not counted in msgs
+      authors = unique non-None sender_id over ALL messages (a short "спасибо"
+                still marks reach)
+    """
+    msgs = sum(len(d['substantive']) for d in documents)
+    likes = sum(
+        likes_of(m.get('reactions'))
+        for d in documents for m in d['messages']
+    )
+    authors = len({
+        m.get('sender_id')
+        for d in documents for m in d['messages']
+        if m.get('sender_id') is not None
+    })
+    return {'msgs': msgs, 'likes': likes, 'authors': authors}
+
+
 def score(stats: dict, maxes: dict) -> float:
     """Normalized hotness score within a set of clusters.
 

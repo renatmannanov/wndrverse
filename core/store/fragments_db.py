@@ -542,11 +542,18 @@ def get_embedded_fragments_for_period(
     Sorted by created_at (so the FIRST message of a cluster = the anchor).
 
     Returns [{id, text, created_at(ISO str), sender_id, embedding(list[float]),
-              channel_id, external_id, reactions(list|None), tags}, ...].
+              channel_id, external_id, reactions(list|None), tags,
+              reply_to_msg_id(str|None), msg_id(str|None)}, ...].
     reactions = metadata->'reactions' (JSONB → python list; SQLAlchemy returns the
     array as a python list directly — verified 2026-06-09 on the local DB). The
     isinstance-str fallback is defensive only. PII (sender_id) stays local; only
     `text` is ever sent to OpenAI downstream.
+
+    reply_to_msg_id / msg_id link reply chains (core.brain.chains). Both are
+    STRINGS — compared string-to-string, never converted to int. msg_id is the
+    fragment's own Telegram message id, parsed from the external_id tail
+    (tg_{chat}_{msg} and legacy wndr_{chat}_{msg} both end in digits); a
+    non-digit tail → None, the message just stays outside reply chains.
     """
     if not _pgvector_available():
         logging.warning("get_embedded_fragments_for_period called but pgvector is not available")
@@ -564,6 +571,7 @@ def get_embedded_fragments_for_period(
                 Fragment.channel_id,
                 Fragment.external_id,
                 Fragment.metadata_['reactions'].label('reactions'),
+                Fragment.metadata_['reply_to_msg_id'].astext.label('reply_to_msg_id'),
                 Fragment.tags,
             )
             .filter(Fragment.topic == topic)
@@ -586,6 +594,11 @@ def get_embedded_fragments_for_period(
                     reactions = json.loads(reactions)
                 except (ValueError, TypeError):
                     reactions = None
+            msg_id = None
+            if r.external_id:
+                tail = r.external_id.rsplit('_', 1)[-1]
+                if tail.isdigit():
+                    msg_id = tail
             out.append({
                 'id': r.id,
                 'text': r.text,
@@ -596,6 +609,8 @@ def get_embedded_fragments_for_period(
                 'external_id': r.external_id,
                 'reactions': reactions,
                 'tags': r.tags or [],
+                'reply_to_msg_id': r.reply_to_msg_id,
+                'msg_id': msg_id,
             })
         return out
     finally:
