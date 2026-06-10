@@ -602,6 +602,37 @@ def get_embedded_fragments_for_period(
         session.close()
 
 
+def count_embedded_fragments_for_period(
+    topic: str,
+    since: datetime | None = None,
+    until: datetime | None = None,
+) -> int:
+    """Cheap COUNT of embedded, non-duplicate fragments of ONE topic in a period.
+
+    Same filter as get_embedded_fragments_for_period (default min_chars), but
+    COUNT only — no row/embedding load. Lets the bot ACK 'found N' BEFORE any
+    OpenAI spend (topic names are the only spend, inside build_topics later).
+    until is the UPPER bound EXCLUSIVE. Requires pgvector (same guard).
+    """
+    if not _pgvector_available():
+        return 0
+    session = SessionLocal()
+    try:
+        query = (
+            session.query(func.count(Fragment.id))
+            .filter(Fragment.topic == topic)
+            .filter(Fragment.embedding.isnot(None))
+            .filter(Fragment.is_duplicate.isnot(True))
+        )
+        if since is not None:
+            query = query.filter(Fragment.created_at >= since)
+        if until is not None:
+            query = query.filter(Fragment.created_at < until)
+        return int(query.scalar() or 0)
+    finally:
+        session.close()
+
+
 def get_latest_cluster_version() -> int | None:
     """Max version from clusters table. None if no clusters exist."""
     session = SessionLocal()

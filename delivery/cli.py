@@ -212,31 +212,64 @@ def _run_digest(topic_arg: str, period: str, channel: str) -> int:
     return 0
 
 
+def build_topics_digest(
+    topic_arg: str,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    limit: int | None = None,
+) -> dict | None:
+    """Core: store → build_topics → render_topics → return result (NO sending).
+
+    The single shared hot-topics path used by BOTH the CLI `topics` subcommand
+    and the bot's /topics command. The caller picks the channel.
+
+    Returns {'text': str, 'found': int} where `found` = number of embedded
+    fragments the period had (BEFORE flood-filter). Returns None if there were
+    0 fragments (caller skips OpenAI spend — build_topics never runs). When
+    found>0 but every theme was filtered out (flood/noise), returns a result
+    with an explanatory text instead — that case is NOT 'no messages'.
+
+    until is the UPPER bound EXCLUSIVE (see get_embedded_fragments_for_period).
+    'all' topic is rejected (variant A is single-topic) — raises ValueError.
+    """
+    if topic_arg == "all":
+        raise ValueError("topics поддерживает только ОДИН топик (вариант А), не 'all'")
+    # header is built BEFORE the 0-fragments return: the 0-topics branch below
+    # needs it too, and both branches must show the same header.
+    header = _digest_header(topic_arg, since, until)
+    frags = get_embedded_fragments_for_period(topic_arg, since=since, until=until)
+    logger.info("topics topic=%s since=%s until=%s → %d fragments",
+                topic_arg, since, until, len(frags))
+    if not frags:
+        return None  # no spend on an empty period
+    topics = build_topics(frags, limit=limit)
+    if not topics:
+        return {
+            'text': f"{header}\n\nЗа период тем не найдено (всё отсеяно как флуд/шум).",
+            'found': len(frags),
+        }
+    return {'text': render_topics(header, topics), 'found': len(frags)}
+
+
 def _run_topics(topic_arg: str, period: str, channel: str, limit: int | None) -> int:
     """Hot-topics digest (experimental, variant A): cluster ONE topic → ranked themes.
 
-    Thin glue: store → brain.topics.build_topics → delivery.topics_render → send.
-    Reuses parse_period + _digest_header. 0 fragments / 0 topics → a friendly line
-    to STDOUT (not just a log) and NO OpenAI spend.
+    Thin wrapper over build_topics_digest (the shared bot+CLI core). 0 fragments /
+    0 topics → a friendly line to STDOUT (not just a log) and NO OpenAI spend.
     """
-    if topic_arg == "all":
-        raise SystemExit("topics поддерживает только ОДИН топик (вариант А), не 'all'")
     since = parse_period(period)
-    until = None
-    frags = get_embedded_fragments_for_period(topic_arg, since=since, until=until)
-    header = _digest_header(topic_arg, since, until)
-    if not frags:
-        channels.send(f"{header}\n\nЗа период сообщений не найдено.", channel=channel)
-        return 0
-    topics = build_topics(frags, limit=limit)
-    if not topics:
+    until = None  # CLI period has no upper bound
+    try:
+        result = build_topics_digest(topic_arg, since=since, until=until, limit=limit)
+    except ValueError as e:
+        raise SystemExit(str(e))  # CLI rendering of the 'all' rejection
+    if result is None:
         channels.send(
-            f"{header}\n\nЗа период тем не найдено (всё отсеяно как флуд/шум).",
+            f"{_digest_header(topic_arg, since, until)}\n\nЗа период сообщений не найдено.",
             channel=channel,
         )
         return 0
-    text = render_topics(header, topics)
-    channels.send(text, channel=channel)
+    channels.send(result['text'], channel=channel)
     return 0
 
 

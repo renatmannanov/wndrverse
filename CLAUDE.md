@@ -84,8 +84,11 @@ the spectral-init `eigsh k>=N` crash. Calibrated thresholds (min_chars=80,
 min_cluster_size=3, min_authors=2, min_probability=0.05) live in `build_topics`
 with a comment. LLM topic names use `core/prompts/topic_label.md`; PII stays local
 (only message text → OpenAI, names/sender_id never leave). A narrow 1-week slice
-may yield few/zero topics by design (little data after the flood-filter). stdout
-only — Telegram delivery / bot command / scheduler are out of scope for this MVP.
+may yield few/zero topics by design (little data after the flood-filter). Output:
+stdout (CLI) or the ingest bot's `/topics` command (DM, see below). The shared
+core is `delivery.cli.build_topics_digest` (store → build_topics → render_topics
+→ `{'text','found'}`, or None on 0 fragments) — used by both CLI and bot. A
+scheduler / posting straight to the group topic are still out of scope.
 
 ### Realtime ingest bot (bot/) — live group → fragments
 
@@ -116,6 +119,15 @@ Two messages: (1) an immediate ack ("Топик … | Период … | Най�
 BEFORE any OpenAI spend; (2) the digest itself as its own DM, kept clean (no
 stats line) so it can later be forwarded to a dedicated topic verbatim. Both go
 to the caller's DM, never the group.
+
+The bot also serves `/topics <topic> <YYYY-MM-DD> <YYYY-MM-DD> [limit]` — the
+hot-topics digest (see section above) over an EXACT date range, same shape as
+`/summary`: same whitelist `WNDR_SUMMARY_ALLOWED` (no separate env), no-args →
+format help + topic list, ack via cheap `count_embedded_fragments_for_period`
+BEFORE any OpenAI spend, then the rendered themes as a clean separate DM.
+`limit` is the optional top-N themes (default 10); `all` topic is rejected
+(variant A is single-topic). found>0 but every theme flood-filtered → an
+explanatory "тем не найдено" DM, distinct from "нет сообщений".
 
 Synthesis (`core/brain/synthesis.py`): for ≤ `MAX_FRAGMENTS_WITHOUT_SELECTION`
 (=150) fragments the whole period is fed to the model in one pass; above that a
@@ -216,7 +228,7 @@ WNDR_DIGEST_TZ     — digest schedule timezone (default Asia/Almaty)
 WNDR_DIGEST_AT     — digest run time HH:MM (default 09:00)
 WNDR_DIGEST_PERIOD — message lookback window (default 1d)
 WNDR_DIGEST_TOPICS — comma-separated topics (default questions_to_women,questions_to_men)
-WNDR_SUMMARY_ALLOWED — CSV of Telegram user_ids allowed to run /summary (empty => nobody)
+WNDR_SUMMARY_ALLOWED — CSV of Telegram user_ids allowed to run /summary AND /topics (empty => nobody)
 ```
 
 ## Stack
