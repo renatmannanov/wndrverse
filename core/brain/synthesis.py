@@ -13,6 +13,7 @@ never sent to OpenAI.
 """
 
 import os
+import json
 import logging
 
 from core.llm.client import complete, COMPLETION_MODEL, COMPLETION_MODEL_SYNTHESIS
@@ -127,12 +128,22 @@ def synthesize(topic: str, fragments: list[dict], topic_type: str | None = None)
                 len(selected), len(author_refs), topic)
     content = _synthesize_fragments(topic, topic_hint, grouped_text)
 
+    # Pass 3 (optional): critic validates content vs sources, logs defects, does
+    # NOT rewrite. Both args are [@N]-form (names never substituted here) — PII safe.
+    # OFF by default (extra gpt-4o call); enable with WNDR_DIGEST_CRITIC for golden
+    # runs / quality debugging.
+    defects = _critique(content, grouped_text) if _critic_enabled() else []
+    if defects:
+        logger.warning("digest critic found %d issue(s) on '%s': %s",
+                       len(defects), topic, defects)
+
     result = {
         'content': content,
         'fragment_ids': [f['id'] for f in selected],
         'author_refs': author_refs,   # {N: name} — PII, local substitution only
         'found': found,
         'model': COMPLETION_MODEL_SYNTHESIS,  # the model that formed the content
+        'critic_issues': defects,     # [] when critic disabled or no defects
     }
     return result
 
@@ -268,6 +279,33 @@ def _synthesize_fragments(topic: str, topic_hint: str, grouped_text: str) -> str
         logger.warning("synthesis output may be truncated on '%s': len=%d, ends with %r",
                        topic, len(content), tail)
     return content
+
+
+def _critic_enabled() -> bool:
+    """True if the self-critic (Pass-3) is on. OFF by default — it costs an extra
+    synthesis-model call. Enable with WNDR_DIGEST_CRITIC truthy (1/true/yes)."""
+    return os.getenv("WNDR_DIGEST_CRITIC", "").strip().lower() in {"1", "true", "yes"}
+
+
+def _critique(digest: str, grouped_text: str) -> list[str]:
+    """Pass 3: validate the digest against its sources; return a list of defect
+    descriptions ([] if none). Does NOT rewrite the digest.
+
+    PII: both `digest` and `grouped_text` are [@N]-form (no names) — nothing here
+    goes to OpenAI but anonymous keys + texts. Fail-soft: any error (network,
+    unparseable output) -> [] + warning, never raises (must not break the digest).
+    """
+    prompt = _load_prompt("digest_critic.md").format(digest=digest, sources=grouped_text)
+    try:
+        raw = complete(prompt, model=COMPLETION_MODEL_SYNTHESIS, temperature=0.0)
+        defects = json.loads(raw)
+    except Exception as exc:  # JSON error, network, anything — fail soft
+        logger.warning("critic output unparseable/failed (%s); skipping", exc)
+        return []
+    if not isinstance(defects, list):
+        logger.warning("critic returned non-list (%r); skipping", type(defects).__name__)
+        return []
+    return [str(d) for d in defects]
 
 
 def _insufficient_data_message(topic: str, fragments: list[dict]) -> str:

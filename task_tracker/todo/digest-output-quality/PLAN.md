@@ -42,7 +42,7 @@
 | 1 | step_1_max_tokens_guard.md | [x] |
 | 2 | step_2_synthesis_model.md | [x] |
 | 3 | step_3_min_chars.md | [x] |
-| 4 | step_4_self_critic.md | [ ] |
+| 4 | step_4_self_critic.md | [x] |
 | 5 | step_5_golden_set.md | [ ] |
 | 6 | step_6_completion.md | [ ] |
 
