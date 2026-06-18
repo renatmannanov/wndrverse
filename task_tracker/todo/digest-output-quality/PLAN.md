@@ -39,7 +39,7 @@
 
 | # | Файл | Статус |
 |---|------|--------|
-| 1 | step_1_max_tokens_guard.md | [ ] |
+| 1 | step_1_max_tokens_guard.md | [x] |
 | 2 | step_2_synthesis_model.md | [ ] |
 | 3 | step_3_min_chars.md | [ ] |
 | 4 | step_4_self_critic.md | [ ] |

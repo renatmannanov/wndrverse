@@ -27,6 +27,14 @@ logger = logging.getLogger(__name__)
 MAX_FRAGMENTS_WITHOUT_SELECTION = 150  # below this, no Pass-1 selection
 SELECTION_TARGET = 20                   # Pass 1 picks ~this many
 INPUT_HARD_CAP = 800                    # cap fed into Pass 1 (last-by-date) — context guard
+# Synthesis output ceiling. The prompt targets ~2800 chars of Cyrillic (up to
+# ~3500); Cyrillic is token-expensive (~0.5–0.7 tok/char on gpt-4o), so 2200
+# clipped output mid-sentence near the upper bound. 3200 gives headroom.
+SYNTHESIS_MAX_TOKENS = 3200
+
+# Terminal punctuation a complete digest is expected to end on. Includes the
+# typographic closing quote (U+201D) and guillemet (U+00BB) seen in real output.
+_TERMINAL_CHARS = {'.', '!', '?', '…', ')', '»', '"', '”', '“'}
 
 _PROMPTS_DIR = os.path.join(os.path.dirname(__file__), os.pardir, "prompts")
 
@@ -224,6 +232,19 @@ def _select_fragments(topic: str, topic_hint: str, fragments: list[dict]) -> set
     return selected
 
 
+def _looks_truncated(text: str) -> bool:
+    """True if `text` likely got cut off mid-output (no terminal punctuation).
+
+    Pure / testable without OpenAI. Trailing whitespace/newlines are ignored.
+    Empty text -> False (not this guard's concern). A signal only — the caller
+    logs a warning; it does NOT retry or raise.
+    """
+    stripped = text.rstrip()
+    if not stripped:
+        return False
+    return stripped[-1] not in _TERMINAL_CHARS
+
+
 def _synthesize_fragments(topic: str, topic_hint: str, grouped_text: str) -> str:
     """Pass 2: build the digest from author-grouped text.
 
@@ -233,11 +254,19 @@ def _synthesize_fragments(topic: str, topic_hint: str, grouped_text: str) -> str
     prompt = _load_prompt("digest_synthesis.md").format(
         topic=topic, topic_hint=topic_hint, fragments_text=grouped_text,
     )
-    # max_tokens is a CEILING (~4000 chars of Cyrillic ≈ 2200 tokens with headroom),
-    # paired with the soft prompt instruction above. Shorter output is fine.
-    # temperature 0.4: livelier, less templated phrasing. Names are pinned by the
-    # [@N] contract (substituted locally), so a higher temp can't desync them.
-    return complete(prompt, temperature=0.4, max_tokens=2200)
+    # max_tokens is a CEILING (SYNTHESIS_MAX_TOKENS), paired with the soft prompt
+    # length instruction. Shorter output is fine. temperature 0.4: livelier, less
+    # templated phrasing. Names are pinned by the [@N] contract (substituted
+    # locally), so a higher temp can't desync them.
+    content = complete(prompt, temperature=0.4, max_tokens=SYNTHESIS_MAX_TOKENS)
+    # Anti-truncation signal: if the output doesn't end on terminal punctuation it
+    # may have been clipped at the token ceiling. Log only (for golden set + prod
+    # monitoring) — never retry or mutate the text.
+    if _looks_truncated(content):
+        tail = content.rstrip()[-20:]
+        logger.warning("synthesis output may be truncated on '%s': len=%d, ends with %r",
+                       topic, len(content), tail)
+    return content
 
 
 def _insufficient_data_message(topic: str, fragments: list[dict]) -> str:
