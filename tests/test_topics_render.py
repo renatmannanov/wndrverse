@@ -51,3 +51,34 @@ def test_render_skips_empty_link():
     out = render_topics('hdr', topics)
     assert 'https://t.me' not in out   # no valid link → no link line
     assert '(3 сообщения)' in out
+
+
+def test_render_intrigue_between_name_and_link():
+    topics = [{'name': 'SaaS-апокалипсис', 'intrigue': 'Кто-то ушёл, а спор остался.',
+               'msgs': 22, 'anchor_channel_id': -1002924475859,
+               'anchor_external_id': 'tg_-1002924475859_9307'}]
+    out = render_topics('hdr', topics)
+    lines = out.splitlines()
+    name_i = next(i for i, l in enumerate(lines) if 'SaaS-апокалипсис' in l)
+    intrigue_i = next(i for i, l in enumerate(lines) if 'Кто-то ушёл' in l)
+    link_i = next(i for i, l in enumerate(lines) if 'https://t.me' in l)
+    assert name_i < intrigue_i < link_i   # hook sits between name and link
+
+
+def test_render_no_intrigue_key_old_format():
+    """A topic dict WITHOUT the 'intrigue' key (old fixtures) must not crash and
+    renders the old name+link format (render reads it via .get)."""
+    topics = [{'name': 'тема', 'msgs': 5,
+               'anchor_channel_id': -1002924475859,
+               'anchor_external_id': 'tg_-1002924475859_9307'}]
+    out = render_topics('hdr', topics)
+    assert 'тема' in out and 'https://t.me/c/2924475859/9307' in out
+
+
+def test_render_empty_intrigue_omits_line():
+    topics = [{'name': 'тема', 'intrigue': '', 'msgs': 5,
+               'anchor_channel_id': -1002924475859,
+               'anchor_external_id': 'tg_-1002924475859_9307'}]
+    out = render_topics('hdr', topics)
+    # exactly header(+blank) + name line + link line; no extra hook line
+    assert len([l for l in out.splitlines() if l.strip()]) == 3

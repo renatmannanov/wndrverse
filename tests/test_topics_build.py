@@ -29,8 +29,11 @@ def _frag(i, vec, sender, text, reactions=None, ts="2026-05-01T00:00:00"):
 
 
 def test_build_topics_two_clusters_ranked(monkeypatch):
-    # stub the LLM name so there's no spend; return a deterministic name
-    monkeypatch.setattr(topics_mod, "complete", lambda *a, **k: "стаб-тема")
+    # stub the LLM so there's no spend; topic_label now returns a JSON object
+    # {name, intrigue} — return a deterministic one (a bare string would fail-soft)
+    monkeypatch.setattr(
+        topics_mod, "complete",
+        lambda *a, **k: '{"name": "стаб-тема", "intrigue": "крючок"}')
 
     rng = np.random.default_rng(1)
     txt = ("осмысленный длинный текст про важную тему сообщества и подробное "
@@ -57,8 +60,32 @@ def test_build_topics_two_clusters_ranked(monkeypatch):
     # hotter cloud (more msgs + likes) ranked first
     assert out[0]['msgs'] >= out[1]['msgs']
     for t in out:
-        assert set(t.keys()) == {'name', 'msgs', 'anchor_channel_id', 'anchor_external_id'}
+        assert set(t.keys()) == {
+            'name', 'intrigue', 'msgs', 'anchor_channel_id', 'anchor_external_id'}
         assert t['name'] == "стаб-тема"
+        assert t['intrigue'] == "крючок"
+
+
+def test_build_topics_label_fail_soft(monkeypatch):
+    """Non-JSON LLM reply (or truncated) → name="тема", intrigue="", no crash."""
+    monkeypatch.setattr(topics_mod, "complete", lambda *a, **k: "не json вовсе")
+    rng = np.random.default_rng(1)
+    txt = ("осмысленный длинный текст про важную тему сообщества и подробное "
+           "обсуждение деталей разных аспектов вопроса участниками чата")
+    frags = []
+    for i in range(6):
+        v = (rng.normal(0, 0.01, 1536) + 1.0).tolist()
+        frags.append(_frag(i, v, sender=100 + (i % 3), text=txt + f" A{i}",
+                            ts=f"2026-05-01T0{i}:00:00"))
+    for i in range(5):
+        v = (rng.normal(0, 0.01, 1536) - 1.0).tolist()
+        frags.append(_frag(20 + i, v, sender=200 + (i % 3), text=txt + f" B{i}",
+                            ts=f"2026-05-02T0{i}:00:00"))
+    out = build_topics(frags, min_authors=2)
+    assert out  # still produced topics
+    for t in out:
+        assert t['name'] == "тема"
+        assert t['intrigue'] == ""
 
 
 def test_anchor_skips_loose_early_member(monkeypatch):
@@ -67,7 +94,9 @@ def test_anchor_skips_loose_early_member(monkeypatch):
     Doesn't run real clustering — drives build_topics' grouping via a stubbed
     cluster_embeddings so probabilities are exact and deterministic.
     """
-    monkeypatch.setattr(topics_mod, "complete", lambda *a, **k: "x")
+    monkeypatch.setattr(
+        topics_mod, "complete",
+        lambda *a, **k: '{"name": "x", "intrigue": ""}')
     txt = ("осмысленный длинный текст про важную тему сообщества и подробное "
            "обсуждение деталей разных аспектов вопроса участниками чата")
     # 4 fragments, one cluster: the EARLIEST one is loosely attached (p=0.5),
@@ -95,7 +124,9 @@ def test_anchor_skips_loose_early_member(monkeypatch):
 
 def test_anchor_falls_back_when_no_tight_members(monkeypatch):
     """All members loose (< 0.9) -> plain earliest wins (no crash, no empty)."""
-    monkeypatch.setattr(topics_mod, "complete", lambda *a, **k: "x")
+    monkeypatch.setattr(
+        topics_mod, "complete",
+        lambda *a, **k: '{"name": "x", "intrigue": ""}')
     txt = ("осмысленный длинный текст про важную тему сообщества и подробное "
            "обсуждение деталей разных аспектов вопроса участниками чата")
     frags = [
@@ -115,7 +146,9 @@ def test_chain_msgs_exclude_reactions_likes_include(monkeypatch):
     """A series (long + 2 short reply-reactions with likes) + a second separate
     cluster: msgs of the thread topic does NOT count reactions, likes DO include
     the reactions' likes, anchor = the series root."""
-    monkeypatch.setattr(topics_mod, "complete", lambda *a, **k: "x")
+    monkeypatch.setattr(
+        topics_mod, "complete",
+        lambda *a, **k: '{"name": "x", "intrigue": ""}')
     txt = ("осмысленный длинный текст про важную тему сообщества и подробное "
            "обсуждение деталей разных аспектов вопроса участниками чата")
 
@@ -160,7 +193,9 @@ def test_reaction_texts_dont_glue_two_conversations(monkeypatch):
     mid-way between the clouds): before chains those reactions were standalone
     points bridging the clouds; now each one rides its thread's document, whose
     length-weighted embedding stays near the substantive root — 2 topics, not 1."""
-    monkeypatch.setattr(topics_mod, "complete", lambda *a, **k: "x")
+    monkeypatch.setattr(
+        topics_mod, "complete",
+        lambda *a, **k: '{"name": "x", "intrigue": ""}')
     rng = np.random.default_rng(3)
     txt = ("осмысленный длинный текст про важную тему сообщества и подробное "
            "обсуждение деталей разных аспектов вопроса участниками чата ") * 3
@@ -203,7 +238,9 @@ def test_reaction_texts_dont_glue_two_conversations(monkeypatch):
 
 
 def test_monologue_dropped(monkeypatch):
-    monkeypatch.setattr(topics_mod, "complete", lambda *a, **k: "x")
+    monkeypatch.setattr(
+        topics_mod, "complete",
+        lambda *a, **k: '{"name": "x", "intrigue": ""}')
     rng = np.random.default_rng(2)
     txt = ("осмысленный длинный текст про важную тему сообщества и подробное "
            "обсуждение деталей разных аспектов вопроса участниками чата")

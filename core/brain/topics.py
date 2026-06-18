@@ -11,6 +11,7 @@ never leave this module.
 """
 
 import os
+import json
 import logging
 
 from core.brain.clustering import cluster_embeddings
@@ -27,6 +28,26 @@ _PROMPTS_DIR = os.path.join(os.path.dirname(__file__), os.pardir, "prompts")
 # Anchor pick: a member this tightly attached (HDBSCAN probability) is "core"
 # enough to represent the cluster; below it we risk linking a vocabulary-stray.
 ANCHOR_MIN_PROBABILITY = 0.9
+
+# topic_label.md asks for a {name, intrigue} OBJECT, so this is its own tolerant
+# parser — NOT synthesis._parse_json_array, whose fallback hunts for '['/']' and
+# would never find a JSON object. Strip a possible ```json fence (same trick as
+# _parse_json_array / the critic), then json.loads; on any failure the caller
+# falls back to name="тема", intrigue="".
+def _parse_label_obj(raw: str) -> dict:
+    """Parse {"name": ..., "intrigue": ...} out of an LLM reply. Returns {} on
+    any failure (non-JSON, truncated, not a dict) — the caller is fail-soft."""
+    s = raw.strip()
+    if s.startswith("```"):
+        s = s.split("\n", 1)[1] if "\n" in s else ""
+        if s.rstrip().endswith("```"):
+            s = s.rstrip()[:-3]
+    s = s.strip()
+    try:
+        obj = json.loads(s)
+    except (json.JSONDecodeError, ValueError):
+        return {}
+    return obj if isinstance(obj, dict) else {}
 
 
 def build_topics(
@@ -51,9 +72,10 @@ def build_topics(
 ) -> list[dict]:
     """Messages of one topic → ranked hot topics.
 
-    Returns [{name, msgs, anchor_channel_id, anchor_external_id}, ...] sorted by
-    descending hotness (hotness.score). PII: only texts go to OpenAI; names/
-    sender_id stay here.
+    Returns [{name, intrigue, msgs, anchor_channel_id, anchor_external_id}, ...]
+    sorted by descending hotness (hotness.score). `intrigue` is a one-line hook
+    (may be "" on LLM/parse failure — render skips it then). PII: only texts go
+    to OpenAI; names/sender_id stay here.
     """
     # --- Layer 1: glue reply chains/series into documents; the flood-filter
     # (min_chars + _is_substantive) lives inside build_chains now — a document
@@ -135,13 +157,22 @@ def build_topics(
         # PII: ONLY message text goes into the prompt — never sender_id/author_name/etc.
         sample_texts = "\n---\n".join(f['text'] for f in samples)
         prompt = template.format(sample_texts=sample_texts)
+        # One call returns BOTH name and intrigue as a JSON object. max_tokens=200
+        # (not 30/120): a Cyrillic intrigue ~140 chars ≈ 70-90 tokens + name + JSON
+        # syntax would clip below 200 → truncated JSON → silent fail-soft.
+        # Model is COMPLETION_MODEL (gpt-4o-mini, the cheap default in llm.client) —
+        # ~200 tokens × N topics per call; mind the prod TPM ceiling (see progress).
+        name, intrigue = "", ""
         try:
-            name = complete(prompt, temperature=0.3, max_tokens=30).strip()
+            raw = complete(prompt, temperature=0.3, max_tokens=200)
+            obj = _parse_label_obj(raw)
+            name = (obj.get('name') or "").strip()
+            intrigue = (obj.get('intrigue') or "").strip()
         except Exception as e:
-            logger.warning("topic-name LLM error: %s", e)
-            name = ""
+            logger.warning("topic-label LLM error: %s", e)
         result.append({
             'name': name or "тема",
+            'intrigue': intrigue,
             'msgs': c['stats']['msgs'],
             'anchor_channel_id': c['anchor_channel_id'],
             'anchor_external_id': c['anchor_external_id'],
