@@ -15,7 +15,7 @@ never sent to OpenAI.
 import os
 import logging
 
-from core.llm.client import complete, COMPLETION_MODEL
+from core.llm.client import complete, COMPLETION_MODEL, COMPLETION_MODEL_SYNTHESIS
 from core.store.fragments_db import save_artifact
 
 logger = logging.getLogger(__name__)
@@ -132,7 +132,7 @@ def synthesize(topic: str, fragments: list[dict], topic_type: str | None = None)
         'fragment_ids': [f['id'] for f in selected],
         'author_refs': author_refs,   # {N: name} — PII, local substitution only
         'found': found,
-        'model': COMPLETION_MODEL,
+        'model': COMPLETION_MODEL_SYNTHESIS,  # the model that formed the content
     }
     return result
 
@@ -258,7 +258,8 @@ def _synthesize_fragments(topic: str, topic_hint: str, grouped_text: str) -> str
     # length instruction. Shorter output is fine. temperature 0.4: livelier, less
     # templated phrasing. Names are pinned by the [@N] contract (substituted
     # locally), so a higher temp can't desync them.
-    content = complete(prompt, temperature=0.4, max_tokens=SYNTHESIS_MAX_TOKENS)
+    content = complete(prompt, model=COMPLETION_MODEL_SYNTHESIS,
+                       temperature=0.4, max_tokens=SYNTHESIS_MAX_TOKENS)
     # Anti-truncation signal: if the output doesn't end on terminal punctuation it
     # may have been clipped at the token ceiling. Log only (for golden set + prod
     # monitoring) — never retry or mutate the text.

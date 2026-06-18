@@ -22,7 +22,11 @@ logger = logging.getLogger(__name__)
 
 # --- model constants (change here to swap models) ---
 EMBED_MODEL = "text-embedding-3-small"   # 1536-dim
+# mini = id-selection / service calls (Pass-1, cheap, deterministic).
 COMPLETION_MODEL = "gpt-4o-mini"
+# Digest prose (Pass-2) + critic — user-facing quality, needs a stronger model.
+# Settable via env (WNDR_SYNTHESIS_MODEL) for A/B without a code change; default gpt-4o.
+COMPLETION_MODEL_SYNTHESIS = os.getenv("WNDR_SYNTHESIS_MODEL", "gpt-4o")
 
 _client: OpenAI | None = None
 
