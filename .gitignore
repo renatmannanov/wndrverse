@@ -34,6 +34,9 @@ core/ingest/topic_map.json
 *.sql
 backup_*.sql
 
+# Golden-set snapshots — humanized digests (real names/@handles). PII, never commit.
+tests/golden/snapshots/
+
 # OS
 .DS_Store
 Thumbs.db
