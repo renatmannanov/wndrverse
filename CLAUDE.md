@@ -72,8 +72,8 @@ A SECOND, experimental digest mode, parallel to the people-grouping digest (whic
 it does NOT touch). Takes messages of ONE topic over a period, glues them into
 reply-thread DOCUMENTS, clusters the documents by meaning (existing embeddings +
 UMAP→HDBSCAN), ranks themes by "hotness" (msgs+likes+authors) and renders
-`emoji + name + (N сообщений) + t.me link`. `--topic all` is rejected (variant A
-is single-topic; cross-topic = future).
+`emoji + name + (N сообщений)` / an `intrigue` hook line / `t.me link`. `--topic
+all` is rejected (variant A is single-topic; cross-topic = future).
 
 Pipeline: `get_embedded_fragments_for_period` (store) → `build_chains`
 (core/brain/chains.py) → `build_topics` (core/brain/topics.py) → `topics_render`
@@ -97,8 +97,17 @@ design — such an anchor can read mid-context. The pure clustering core is
 `run_clustering`); it falls back to UMAP `init='random'` on small slices to dodge
 the spectral-init `eigsh k>=N` crash. Calibrated thresholds (min_chars=80,
 min_cluster_size=2 — recalibrated 2026-06-10 for document clustering,
-min_authors=2, min_probability=0.05) live in `build_topics` with a comment. LLM topic names use `core/prompts/topic_label.md`; PII stays local
-(only message text → OpenAI, names/sender_id never leave). A narrow 1-week slice
+min_authors=2, min_probability=0.05) live in `build_topics` with a comment. LLM
+labels use `core/prompts/topic_label.md` (2026-06-18): ONE call returns a JSON
+object `{"name","intrigue"}` — a 2-5-word title + a one-line hook (≤140 chars,
+a question/conflict, not a recap; the prompt carries a good/bad few-shot).
+`build_topics` parses it with a dedicated tolerant OBJECT parser (`_parse_label_obj`,
+NOT synthesis `_parse_json_array` which hunts for `[`/`]`), `max_tokens=200` (30
+clipped the Cyrillic intrigue), model = `COMPLETION_MODEL` (gpt-4o-mini); fail-soft
+to `name="тема", intrigue=""` on any parse/LLM error. Topic dict gains an `intrigue`
+key; `render_topics` prints the hook line between name and link via `.get` (empty/
+absent → old format). PII stays local (only message text → OpenAI, names/sender_id
+never leave). A narrow 1-week slice
 may yield few/zero topics by design (little data after the flood-filter). Output:
 stdout (CLI) or the ingest bot's `/topics` command (DM, see below). The shared
 core is `delivery.cli.build_topics_digest` (store → build_topics → render_topics
@@ -116,7 +125,12 @@ funnel as the file loader. Needs `BOT_TOKEN_INGEST` (separate bot, privacy mode
 OFF) and a `core/ingest/topic_map.json` mapping `(chat_id, thread_id) → topic`
 (gitignored — holds real chat_ids; copy from `topic_map.example.json`).
 Unknown chats are skipped + logged. Run on Windows with `PYTHONUTF8=1` if the
-console mangles Cyrillic.
+console mangles Cyrillic. **boltalka = the forum's «General» topic → its messages
+arrive with `message_thread_id=None`, so its row MUST be `thread_id: null` (the
+per-channel fallback `(chat_id, None)` catches it). Do NOT "fix" it back to a
+number (was `1` → silent skip «no topic», dropped 4–18 Jun until
+`fix-boltalka-ingest` 2026-06-18). Other topics carry their own non-null
+thread_id and aren't touched by the fallback.**
 
 The same bot also serves `/summary <topic> <YYYY-MM-DD> <YYYY-MM-DD>` — an
 on-demand digest over an EXACT (inclusive) date range, DM'd to the caller. Access
@@ -171,6 +185,16 @@ not gospel. **Known limitation (NOT fixed here):** dedup `is_duplicate` is set o
 by `core/enrich/embedder.py` on a 6h timer, so a fresh-period digest can see near-
 dupes as distinct (up to 6h lag). Golden-set regression: `python -m tests.golden.run`
 (snapshots are PII, gitignored; `--baseline` captures pre-change output).
+
+**Richer themes** (2026-06-18, `task_tracker/done/digest-richer-themes/`): the
+«📌 ГЛАВНЫЕ ТЕМЫ» block of `/summary` now asks (in `digest_synthesis.md`) for a
+short title + 1-2 sentences of substance per theme (what was discussed / where it
+landed / the disagreement) instead of a bare one-liner; «КТО ЧТО» and «ЗАПРОСЫ»
+are untouched. The `[@N]` ban inside the themes block stays; the prompt makes
+explicit that theme substance must fit WITHIN the ~2800/≤3500 budget, not add on
+top. Local smoke: questions_to_women monthly digest ≈3231 chars — close to the
+3500 cap on participant-heavy topics, watch for overflow (still under). Same task
+also added the `/topics` intrigue hook (see Hot-topics section above).
 
 **Digest author grouping + `[@N]` contract** (2026-06-05): the digest references
 PEOPLE, not messages. Before Pass-2, `_group_by_author` (synthesis.py) groups the

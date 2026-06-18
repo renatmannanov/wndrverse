@@ -8,11 +8,13 @@ position; the LLM never invents emoji).
 TopicCluster contract (built by brain.topics.build_topics):
     {
       'name': str,                # topic name (LLM, in Russian)
+      'intrigue': str,            # one-line hook (LLM); may be "" / absent → skipped
       'msgs': int,                # number of messages in the cluster
       'anchor_channel_id': int,   # -100… form (from the anchor message)
       'anchor_external_id': str,  # 'tg_-100…_<msg_id>' (from the anchor message)
     }
-There is NO 'emoji' field — the render assigns it by position.
+There is NO 'emoji' field — the render assigns it by position. 'intrigue' is read
+via .get — an empty or missing key just omits the hook line (old format).
 """
 
 # Fixed palette: topic emoji = EMOJI[i % len(EMOJI)], i = index in the sorted list.
@@ -65,18 +67,24 @@ def render_topics(header: str, topics: list[dict]) -> str:
     📅 Болталка · 2026-05-09 — 2026-06-09
 
     📈 <name> (22 сообщения)
+       <intrigue — one-line hook, only if non-empty>
        https://t.me/c/2924475859/9307
     🔮 <name> (14 сообщений)
        https://t.me/c/2924475859/9308
 
     topics are already sorted by hotness (step 5). Emoji from the palette by topic
-    index. An empty link → the link line is NOT printed (topic stays link-less).
+    index. The intrigue line sits BETWEEN the name and the link, printed only when
+    non-empty (empty/absent → old format). An empty link → the link line is NOT
+    printed (topic stays link-less).
     """
     lines = [header, ""]
     for i, t in enumerate(topics):
         emoji = EMOJI[i % len(EMOJI)]
         n = t['msgs']
         lines.append(f"{emoji} {t['name']} ({n} {plural_msgs(n)})")
+        intrigue = (t.get('intrigue') or "").strip()
+        if intrigue:
+            lines.append(f"   {intrigue}")
         link = tg_link(t['anchor_channel_id'], t['anchor_external_id'])
         if link:
             lines.append(f"   {link}")
