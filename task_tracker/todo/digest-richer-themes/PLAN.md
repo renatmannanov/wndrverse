@@ -39,7 +39,7 @@
 | # | Файл | Статус |
 |---|------|--------|
 | 1 | step_1_topics_intrigue.md | [x] |
-| 2 | step_2_summary_themes.md | [ ] |
+| 2 | step_2_summary_themes.md | [x] |
 | 3 | step_3_local_smoke_golden.md | [ ] |
 | 4 | step_4_completion.md | [ ] |
 
