@@ -1,6 +1,6 @@
 # Полнота тем: /topics с интригой + /summary с содержанием тем
 
-> Статус: pending
+> Статус: done
 > Дата: 2026-06-18
 > Тип: фича (качество вывода)
 
@@ -40,8 +40,8 @@
 |---|------|--------|
 | 1 | step_1_topics_intrigue.md | [x] |
 | 2 | step_2_summary_themes.md | [x] |
-| 3 | step_3_local_smoke_golden.md | [ ] |
-| 4 | step_4_completion.md | [ ] |
+| 3 | step_3_local_smoke_golden.md | [x] |
+| 4 | step_4_completion.md | [x] |
 
 ## Порядок и зависимости
 
