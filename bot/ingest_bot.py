@@ -254,7 +254,7 @@ def validate_topics_args(args: list[str]) -> tuple[str, object, object, int]:
 def _topics_help() -> str:
     """Format help + the list of topics that actually have fragments.
 
-    NOTE: the counts here follow get_topics_with_counts' filter (min_chars=150)
+    NOTE: the counts here follow get_topics_with_counts' filter (min_chars=80)
     and will NOT match the /topics ack count (count_embedded_fragments_for_period,
     a different filter). That's fine: help is a rough 'which topics exist' guide,
     the ack is the exact per-period count. Don't try to sync them.
