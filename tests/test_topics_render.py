@@ -75,6 +75,21 @@ def test_render_no_intrigue_key_old_format():
     assert 'тема' in out and 'https://t.me/c/2924475859/9307' in out
 
 
+def test_render_blank_line_between_topics():
+    """Topics are separated by a blank line; no trailing blank after the last."""
+    topics = [
+        {'name': 'A', 'intrigue': 'крючок A', 'msgs': 5,
+         'anchor_channel_id': -1002924475859, 'anchor_external_id': 'tg_-1002924475859_9307'},
+        {'name': 'B', 'intrigue': 'крючок B', 'msgs': 3,
+         'anchor_channel_id': -1002924475859, 'anchor_external_id': 'tg_-1002924475859_9308'},
+    ]
+    out = render_topics('hdr', topics)
+    # blank line between the two topic blocks: link of A, empty, emoji of B
+    assert '/9307\n\n' in out
+    # no trailing blank line after the last topic
+    assert not out.endswith('\n')
+
+
 def test_render_empty_intrigue_omits_line():
     topics = [{'name': 'тема', 'intrigue': '', 'msgs': 5,
                'anchor_channel_id': -1002924475859,

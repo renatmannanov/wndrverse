@@ -69,23 +69,27 @@ def render_topics(header: str, topics: list[dict]) -> str:
     📈 <name> (22 сообщения)
        <intrigue — one-line hook, only if non-empty>
        https://t.me/c/2924475859/9307
+
     🔮 <name> (14 сообщений)
        https://t.me/c/2924475859/9308
 
     topics are already sorted by hotness (step 5). Emoji from the palette by topic
     index. The intrigue line sits BETWEEN the name and the link, printed only when
     non-empty (empty/absent → old format). An empty link → the link line is NOT
-    printed (topic stays link-less).
+    printed (topic stays link-less). Topics are separated by a blank line for
+    readability (no trailing blank after the last one).
     """
-    lines = [header, ""]
+    blocks = []
     for i, t in enumerate(topics):
         emoji = EMOJI[i % len(EMOJI)]
         n = t['msgs']
-        lines.append(f"{emoji} {t['name']} ({n} {plural_msgs(n)})")
+        block = [f"{emoji} {t['name']} ({n} {plural_msgs(n)})"]
         intrigue = (t.get('intrigue') or "").strip()
         if intrigue:
-            lines.append(f"   {intrigue}")
+            block.append(f"   {intrigue}")
         link = tg_link(t['anchor_channel_id'], t['anchor_external_id'])
         if link:
-            lines.append(f"   {link}")
-    return "\n".join(lines)
+            block.append(f"   {link}")
+        blocks.append("\n".join(block))
+    # header, blank line, then topic blocks separated by a blank line
+    return header + "\n\n" + "\n\n".join(blocks)
