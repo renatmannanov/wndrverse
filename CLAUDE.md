@@ -150,6 +150,28 @@ Pass-1 LLM selection trims to ~20 (now over FULL text, not 100-char previews).
 The 150 threshold + full-text selection came from a 2026-06-04 A/B/C test:
 synthesizing all messages of a monthly range beat selection (more themes, cheaper).
 
+**Digest output quality** (2026-06-18, `task_tracker/done/digest-output-quality/`):
+Pass-2 synthesis runs on **gpt-4o** (Pass-1 selection stays gpt-4o-mini) —
+constant `COMPLETION_MODEL_SYNTHESIS`, settable via env `WNDR_SYNTHESIS_MODEL`
+(default gpt-4o) for A/B without a code change. `max_tokens` for Pass-2 is
+`SYNTHESIS_MAX_TOKENS=3200` (Cyrillic is token-expensive; 2200 clipped long
+digests); `_looks_truncated` logs a warning when output doesn't end on terminal
+punctuation (signal only, no retry). `min_chars` for digest eligibility is **80**
+(was 150) in `get_fragments_for_digest` + `get_topics_with_counts` — short offers/
+requests now reach synthesis (hot-topics `get_embedded_fragments_for_period` keeps
+min_chars=1). CAVEAT found in testing: a topic that crosses 150 at the new threshold
+trips Pass-1 selection (used≈20), which can SHORTEN its digest — revisit
+`MAX_FRAGMENTS_WITHOUT_SELECTION` if that bites. An optional **self-critic Pass-3**
+(`_critique`, prompt `core/prompts/digest_critic.md`) validates the digest vs its
+sources and logs defects WITHOUT rewriting — OFF by default, enable with
+`WNDR_DIGEST_CRITIC` truthy. It runs on `[@N]`-form text (PII-safe), is fail-soft
+(unparseable→[]), and `result['critic_issues']` rides through `build_digest`. Note:
+the gpt-4o critic is noisy (false positives on `[@N]` numbers) — useful as a signal,
+not gospel. **Known limitation (NOT fixed here):** dedup `is_duplicate` is set only
+by `core/enrich/embedder.py` on a 6h timer, so a fresh-period digest can see near-
+dupes as distinct (up to 6h lag). Golden-set regression: `python -m tests.golden.run`
+(snapshots are PII, gitignored; `--baseline` captures pre-change output).
+
 **Digest author grouping + `[@N]` contract** (2026-06-05): the digest references
 PEOPLE, not messages. Before Pass-2, `_group_by_author` (synthesis.py) groups the
 fragments by author (key: `sender_id` → `author_name` → anon) into one `[@N]` block
@@ -247,6 +269,8 @@ WNDR_DIGEST_AT     — digest run time HH:MM (default 09:00)
 WNDR_DIGEST_PERIOD — message lookback window (default 1d)
 WNDR_DIGEST_TOPICS — comma-separated topics (default questions_to_women,questions_to_men)
 WNDR_SUMMARY_ALLOWED — CSV of Telegram user_ids allowed to run /summary AND /topics (empty => nobody)
+WNDR_SYNTHESIS_MODEL — digest Pass-2 synthesis model (default gpt-4o; A/B without a code change)
+WNDR_DIGEST_CRITIC — enable digest self-critic Pass-3 (truthy=on; default OFF, +1 LLM call, noisy)
 ```
 
 ## Stack

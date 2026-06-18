@@ -209,7 +209,7 @@ def get_fragments_count() -> int:
 
 
 def get_topics_with_counts(
-    min_chars: int = 150,
+    min_chars: int = 80,
     only: set[str] | None = None,
 ) -> list[tuple[str, int]]:
     """Distinct topics that have digest-eligible fragments, with their counts.
@@ -244,7 +244,7 @@ def get_fragments_for_digest(
     topic: str | None,
     since: datetime | None,
     until: datetime | None = None,
-    min_chars: int = 150,
+    min_chars: int = 80,
 ) -> list[dict]:
     """Fragments for digest synthesis.
 

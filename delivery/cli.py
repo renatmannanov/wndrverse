@@ -197,6 +197,7 @@ def build_digest(
         'text': text,
         'found': result.get('found', len(fragments)),
         'used': len(result['fragment_ids']),
+        'critic_issues': result.get('critic_issues', []),
     }
 
 

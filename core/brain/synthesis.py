@@ -13,9 +13,10 @@ never sent to OpenAI.
 """
 
 import os
+import json
 import logging
 
-from core.llm.client import complete, COMPLETION_MODEL
+from core.llm.client import complete, COMPLETION_MODEL, COMPLETION_MODEL_SYNTHESIS
 from core.store.fragments_db import save_artifact
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,14 @@ logger = logging.getLogger(__name__)
 MAX_FRAGMENTS_WITHOUT_SELECTION = 150  # below this, no Pass-1 selection
 SELECTION_TARGET = 20                   # Pass 1 picks ~this many
 INPUT_HARD_CAP = 800                    # cap fed into Pass 1 (last-by-date) — context guard
+# Synthesis output ceiling. The prompt targets ~2800 chars of Cyrillic (up to
+# ~3500); Cyrillic is token-expensive (~0.5–0.7 tok/char on gpt-4o), so 2200
+# clipped output mid-sentence near the upper bound. 3200 gives headroom.
+SYNTHESIS_MAX_TOKENS = 3200
+
+# Terminal punctuation a complete digest is expected to end on. Includes the
+# typographic closing quote (U+201D) and guillemet (U+00BB) seen in real output.
+_TERMINAL_CHARS = {'.', '!', '?', '…', ')', '»', '"', '”', '“'}
 
 _PROMPTS_DIR = os.path.join(os.path.dirname(__file__), os.pardir, "prompts")
 
@@ -119,12 +128,22 @@ def synthesize(topic: str, fragments: list[dict], topic_type: str | None = None)
                 len(selected), len(author_refs), topic)
     content = _synthesize_fragments(topic, topic_hint, grouped_text)
 
+    # Pass 3 (optional): critic validates content vs sources, logs defects, does
+    # NOT rewrite. Both args are [@N]-form (names never substituted here) — PII safe.
+    # OFF by default (extra gpt-4o call); enable with WNDR_DIGEST_CRITIC for golden
+    # runs / quality debugging.
+    defects = _critique(content, grouped_text) if _critic_enabled() else []
+    if defects:
+        logger.warning("digest critic found %d issue(s) on '%s': %s",
+                       len(defects), topic, defects)
+
     result = {
         'content': content,
         'fragment_ids': [f['id'] for f in selected],
         'author_refs': author_refs,   # {N: name} — PII, local substitution only
         'found': found,
-        'model': COMPLETION_MODEL,
+        'model': COMPLETION_MODEL_SYNTHESIS,  # the model that formed the content
+        'critic_issues': defects,     # [] when critic disabled or no defects
     }
     return result
 
@@ -224,6 +243,19 @@ def _select_fragments(topic: str, topic_hint: str, fragments: list[dict]) -> set
     return selected
 
 
+def _looks_truncated(text: str) -> bool:
+    """True if `text` likely got cut off mid-output (no terminal punctuation).
+
+    Pure / testable without OpenAI. Trailing whitespace/newlines are ignored.
+    Empty text -> False (not this guard's concern). A signal only — the caller
+    logs a warning; it does NOT retry or raise.
+    """
+    stripped = text.rstrip()
+    if not stripped:
+        return False
+    return stripped[-1] not in _TERMINAL_CHARS
+
+
 def _synthesize_fragments(topic: str, topic_hint: str, grouped_text: str) -> str:
     """Pass 2: build the digest from author-grouped text.
 
@@ -233,11 +265,70 @@ def _synthesize_fragments(topic: str, topic_hint: str, grouped_text: str) -> str
     prompt = _load_prompt("digest_synthesis.md").format(
         topic=topic, topic_hint=topic_hint, fragments_text=grouped_text,
     )
-    # max_tokens is a CEILING (~4000 chars of Cyrillic ≈ 2200 tokens with headroom),
-    # paired with the soft prompt instruction above. Shorter output is fine.
-    # temperature 0.4: livelier, less templated phrasing. Names are pinned by the
-    # [@N] contract (substituted locally), so a higher temp can't desync them.
-    return complete(prompt, temperature=0.4, max_tokens=2200)
+    # max_tokens is a CEILING (SYNTHESIS_MAX_TOKENS), paired with the soft prompt
+    # length instruction. Shorter output is fine. temperature 0.4: livelier, less
+    # templated phrasing. Names are pinned by the [@N] contract (substituted
+    # locally), so a higher temp can't desync them.
+    content = complete(prompt, model=COMPLETION_MODEL_SYNTHESIS,
+                       temperature=0.4, max_tokens=SYNTHESIS_MAX_TOKENS)
+    # Anti-truncation signal: if the output doesn't end on terminal punctuation it
+    # may have been clipped at the token ceiling. Log only (for golden set + prod
+    # monitoring) — never retry or mutate the text.
+    if _looks_truncated(content):
+        tail = content.rstrip()[-20:]
+        logger.warning("synthesis output may be truncated on '%s': len=%d, ends with %r",
+                       topic, len(content), tail)
+    return content
+
+
+def _critic_enabled() -> bool:
+    """True if the self-critic (Pass-3) is on. OFF by default — it costs an extra
+    synthesis-model call. Enable with WNDR_DIGEST_CRITIC truthy (1/true/yes)."""
+    return os.getenv("WNDR_DIGEST_CRITIC", "").strip().lower() in {"1", "true", "yes"}
+
+
+def _parse_json_array(raw: str) -> list:
+    """Tolerantly parse a JSON array of strings out of an LLM reply.
+
+    Models (gpt-4o) often wrap the array in a ```json … ``` fence or add prose.
+    Strip a leading/trailing code fence, then fall back to the first '[' … last ']'
+    slice. Raises (caught by the caller) if no array can be recovered.
+    """
+    s = raw.strip()
+    if s.startswith("```"):
+        # drop the opening fence line (```json / ```) and any trailing fence
+        s = s.split("\n", 1)[1] if "\n" in s else ""
+        if s.rstrip().endswith("```"):
+            s = s.rstrip()[:-3]
+    s = s.strip()
+    try:
+        return json.loads(s)
+    except json.JSONDecodeError:
+        start, end = s.find("["), s.rfind("]")
+        if start != -1 and end > start:
+            return json.loads(s[start:end + 1])
+        raise
+
+
+def _critique(digest: str, grouped_text: str) -> list[str]:
+    """Pass 3: validate the digest against its sources; return a list of defect
+    descriptions ([] if none). Does NOT rewrite the digest.
+
+    PII: both `digest` and `grouped_text` are [@N]-form (no names) — nothing here
+    goes to OpenAI but anonymous keys + texts. Fail-soft: any error (network,
+    unparseable output) -> [] + warning, never raises (must not break the digest).
+    """
+    prompt = _load_prompt("digest_critic.md").format(digest=digest, sources=grouped_text)
+    try:
+        raw = complete(prompt, model=COMPLETION_MODEL_SYNTHESIS, temperature=0.0)
+        defects = _parse_json_array(raw)
+    except Exception as exc:  # JSON error, network, anything — fail soft
+        logger.warning("critic output unparseable/failed (%s); skipping", exc)
+        return []
+    if not isinstance(defects, list):
+        logger.warning("critic returned non-list (%r); skipping", type(defects).__name__)
+        return []
+    return [str(d) for d in defects]
 
 
 def _insufficient_data_message(topic: str, fragments: list[dict]) -> str:
