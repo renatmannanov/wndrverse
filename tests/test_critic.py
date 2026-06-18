@@ -33,6 +33,24 @@ def test_critique_returns_defect_list(monkeypatch):
     assert out == ["обрыв в конце", "выдуман [@9]"]
 
 
+def test_critique_strips_json_code_fence(monkeypatch):
+    monkeypatch.setattr(syn, "_load_prompt", lambda n: "{digest}{sources}")
+    fenced = '```json\n["обрыв в конце", "выдуман [@9]"]\n```'
+    monkeypatch.setattr(syn, "complete", lambda *a, **k: fenced)
+    assert syn._critique("d", "s") == ["обрыв в конце", "выдуман [@9]"]
+
+
+def test_critique_handles_prose_around_array(monkeypatch):
+    monkeypatch.setattr(syn, "_load_prompt", lambda n: "{digest}{sources}")
+    noisy = 'Вот дефекты:\n["обрыв"]\nЭто всё.'
+    monkeypatch.setattr(syn, "complete", lambda *a, **k: noisy)
+    assert syn._critique("d", "s") == ["обрыв"]
+
+
+def test_parse_json_array_plain_fence_empty():
+    assert syn._parse_json_array("```json\n[]\n```") == []
+
+
 def test_critique_garbage_is_empty(monkeypatch):
     monkeypatch.setattr(syn, "_load_prompt", lambda n: "{digest}{sources}")
     monkeypatch.setattr(syn, "complete", lambda *a, **k: "не json вообще")

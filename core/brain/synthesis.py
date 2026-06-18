@@ -287,6 +287,29 @@ def _critic_enabled() -> bool:
     return os.getenv("WNDR_DIGEST_CRITIC", "").strip().lower() in {"1", "true", "yes"}
 
 
+def _parse_json_array(raw: str) -> list:
+    """Tolerantly parse a JSON array of strings out of an LLM reply.
+
+    Models (gpt-4o) often wrap the array in a ```json … ``` fence or add prose.
+    Strip a leading/trailing code fence, then fall back to the first '[' … last ']'
+    slice. Raises (caught by the caller) if no array can be recovered.
+    """
+    s = raw.strip()
+    if s.startswith("```"):
+        # drop the opening fence line (```json / ```) and any trailing fence
+        s = s.split("\n", 1)[1] if "\n" in s else ""
+        if s.rstrip().endswith("```"):
+            s = s.rstrip()[:-3]
+    s = s.strip()
+    try:
+        return json.loads(s)
+    except json.JSONDecodeError:
+        start, end = s.find("["), s.rfind("]")
+        if start != -1 and end > start:
+            return json.loads(s[start:end + 1])
+        raise
+
+
 def _critique(digest: str, grouped_text: str) -> list[str]:
     """Pass 3: validate the digest against its sources; return a list of defect
     descriptions ([] if none). Does NOT rewrite the digest.
@@ -298,7 +321,7 @@ def _critique(digest: str, grouped_text: str) -> list[str]:
     prompt = _load_prompt("digest_critic.md").format(digest=digest, sources=grouped_text)
     try:
         raw = complete(prompt, model=COMPLETION_MODEL_SYNTHESIS, temperature=0.0)
-        defects = json.loads(raw)
+        defects = _parse_json_array(raw)
     except Exception as exc:  # JSON error, network, anything — fail soft
         logger.warning("critic output unparseable/failed (%s); skipping", exc)
         return []
