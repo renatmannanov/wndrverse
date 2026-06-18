@@ -1,7 +1,7 @@
 # Шаг 1: max_tokens 2200→3200 + anti-truncation guard
 
 > Зависит от: нет
-> Статус: [ ] pending
+> Статус: [x] done
 
 ## Задача
 
